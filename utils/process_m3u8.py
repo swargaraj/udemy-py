@@ -41,7 +41,7 @@ def download_and_merge_m3u8(m3u8_file_url, download_folder_path, title_of_output
 def merge_segments_into_mp4(m3u8_file_path, download_folder_path, output_file_name, logger):
     output_path = os.path.join(os.path.dirname(download_folder_path))
 
-    nm3u8dl_command = f"n_m3u8dl-re \"{m3u8_file_path}\" --save-dir \"{output_path}\" --save-name \"{output_file_name}\" --auto-select --concurrent-download --del-after-done --no-log --log-level ERROR"
+    nm3u8dl_command = f"n_m3u8dl-re \"{m3u8_file_path}\" --save-dir \"{output_path}\" --save-name \"{output_file_name}\" --auto-select --concurrent-download --del-after-done --no-log --tmp-dir \"{download_folder_path}\" --log-level ERROR"
     os.system(nm3u8dl_command)
 
     logger.info(f"{output_file_name} downloaded successfully")

@@ -3,3 +3,5 @@ logs/
 cookies.txt
 venv/
 courses/
+dist/
+build/

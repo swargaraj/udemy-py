@@ -2,6 +2,8 @@ import os
 import time
 import logging
 import argparse
+import itertools
+import sys
 
 COURSE_URL = "https://udemy.com/api-2.0/courses/{course_id}/"
 CURRICULUM_URL = "https://udemy.com/api-2.0/courses/{course_id}/subscriber-curriculum-items/"
@@ -51,3 +53,14 @@ class LoadAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         # Set the value to True if no argument is provided, otherwise set it to the string value.
         setattr(namespace, self.dest, values if values is not None else True)
+
+
+# The animation function
+def animate(stop_event, message, completed_message):
+    for c in itertools.cycle(['|', '/', '-', '\\']):
+        if stop_event.is_set():
+            break
+        sys.stdout.write(f'\r{message} {c}')
+        sys.stdout.flush()
+        time.sleep(0.1)
+    sys.stdout.write(f'\r{completed_message}             \n')
