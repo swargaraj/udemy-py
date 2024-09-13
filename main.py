@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import requests
 import argparse
 import subprocess
 from pathvalidate import sanitize_filename
@@ -8,8 +9,8 @@ from pathvalidate import sanitize_filename
 import re
 from tqdm import tqdm
 import http.cookiejar as cookielib
+from concurrent.futures import ThreadPoolExecutor
 
-import requests
 
 from constants import *
 from utils.process_m3u8 import download_and_merge_m3u8
@@ -135,40 +136,54 @@ class Udemy:
 
     def download_course(self, course_id, curriculum):
         mindex = 1
-        for chapter in curriculum:
-            logger.info(f"Dowloading Chapter: {chapter['title']} ({mindex}/{len(curriculum)})")
-            folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
-            lindex = 1
-            for lecture in chapter['children']:
-                temp_folder_path = os.path.join(folder_path, str(lecture['id']))
-                self.create_directory(temp_folder_path)
-                if lecture['_class'] == 'lecture':
-                    lect_info = self.fetch_lecture_info(course_id, lecture['id'])
-                    logger.info(f"Dowloading Lecture: {lecture['title']} ({lindex}/{len(chapter['children'])})")
-                    
-                    if lecture['is_free']:
-                        m3u8_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/x-mpegURL"), None)
-                        if m3u8_url is None:
-                            logger.error(f"Could not find m3u8 url for {lecture['title']}")
-                            continue
-                        else:
-                            download_and_merge_m3u8(m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
-                    else:
-                        if key is None:
-                            logger.warning("No decryption key is provided. If the lecture is DRM protected, it will fail to merge.")
-                        mpd_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/dash+xml"), None)
-                        if mpd_url is None:
-                            logger.error(f"Could not find mpd url for {lecture['title']}")
-                            continue
-                        else:
-                            download_and_merge_mpd(mpd_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", key, logger)
-                    
-                if lecture['_class'] == 'practice':
-                    # TODO
-                    pass
-                lindex += 1
-            mindex += 1
 
+        # Define a function to process each lecture
+        def process_lecture(lecture, course_id, folder_path, lindex, logger, key):
+            temp_folder_path = os.path.join(folder_path, str(lecture['id']))
+            self.create_directory(temp_folder_path)
+
+            if lecture['_class'] == 'lecture':
+                lect_info = self.fetch_lecture_info(course_id, lecture['id'])
+                logger.info(f"Downloading Lecture: {lecture['title']} ({lindex}/{len(chapter['children'])})")
+
+                if lecture['is_free']:
+                    m3u8_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/x-mpegURL"), None)
+                    if m3u8_url is None:
+                        logger.error(f"Could not find m3u8 URL for {lecture['title']}")
+                    else:
+                        download_and_merge_m3u8(m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
+                else:
+                    if key is None:
+                        logger.warning("No decryption key is provided. If the lecture is DRM protected, it will fail to merge.")
+                    mpd_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/dash+xml"), None)
+                    if mpd_url is None:
+                        logger.error(f"Could not find mpd URL for {lecture['title']}")
+                    else:
+                        download_and_merge_mpd(mpd_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", key, logger)
+
+            elif lecture['_class'] == 'practice':
+                # TODO: Handle practice lectures
+                pass
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            for chapter in curriculum:
+                logger.info(f"Downloading Chapter: {chapter['title']} ({mindex}/{len(curriculum)})")
+                folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
+                lindex = 1
+
+                # Create a list of futures to hold ongoing tasks
+                futures = []
+
+                for lecture in chapter['children']:
+                    # Submit the lecture processing task to the ThreadPoolExecutor
+                    futures.append(executor.submit(process_lecture, lecture, course_id, folder_path, lindex, logger, key))
+                    lindex += 1
+
+                # Wait for all futures to complete for the current chapter
+                for future in futures:
+                    future.result()
+
+                mindex += 1
 def check_prerequisites():
     if not os.path.isfile(cookie_path):
         logger.error(f"{cookie_path} not found.")
@@ -192,11 +207,13 @@ def main():
     global course_url, key, cookie_path, COURSE_DIR
 
     parser = argparse.ArgumentParser(description="Udemy Course Downloader")
+    # parser.add_argument("--id", "-i", type=str, required=True, help="The ID of the Udemy course to download")
     parser.add_argument("--url", "-u", type=str, required=True, help="The URL of the Udemy course to download")
     parser.add_argument("--key", "-k", type=str, help="Key to decrypt the DRM-protected videos")
     parser.add_argument("--cookies", "-c", type=str, default="cookies.txt", help="Path to cookies.txt file")
     parser.add_argument("--load", "-l", help="Load course curriculum from file", action=LoadAction, const=True, nargs='?')
     parser.add_argument("--save", "-s", help="Save course curriculum to a file", action=LoadAction, const=True, nargs='?')
+    parser.add_argument("--threads", "-t", type=int, default=4, help="Number of threads to use")
     
     args = parser.parse_args()
 
