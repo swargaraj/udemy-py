@@ -105,7 +105,7 @@ class Udemy:
 
         num_chapters = len(curriculum)
 
-        logger.info(f"Found {num_chapters} Modules, {total_lectures} Lectures & {total_practices} Practices")
+        logger.info(f"Found {num_chapters} Modules, {total_lectures} Lectures & {total_practices} Practice Assets")
 
         return curriculum
     
@@ -140,6 +140,8 @@ class Udemy:
                         else:
                             download_and_merge_m3u8(m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
                     else:
+                        if key is None:
+                            logger.warning("No decryption key is provided. If the lecture is DRM protected, it will fail to merge.")
                         mpd_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/dash+xml"), None)
                         if mpd_url is None:
                             logger.error(f"Could not find mpd url for {lecture['title']}")
@@ -177,15 +179,22 @@ def main():
 
     parser = argparse.ArgumentParser(description="Udemy Course Downloader")
     parser.add_argument("--url", "-u", type=str, required=True, help="The URL of the Udemy course to download")
-    parser.add_argument("--key", "-k", type=str, required=True, help="Key to decrypt the DRM-protected videos")
+    parser.add_argument("--key", "-k", type=str, help="Key to decrypt the DRM-protected videos")
     parser.add_argument("--cookies", "-c", type=str, default="cookies.txt", help="Path to cookies.txt file")
+    parser.add_argument("--load", "-l", help="Load course curriculum from file", action=LoadAction, const=True, nargs='?')
+    parser.add_argument("--save", "-s", help="Save course curriculum to a file", action=LoadAction, const=True, nargs='?')
     
     args = parser.parse_args()
 
     course_url = args.url
     key = args.key
-    cookie_path = args.cookies
     
+    if key is not None and not ":" in key:
+        logger.error("Invalid decryption key provided. Key format should be key:value")
+        return
+    
+    cookie_path = args.cookies
+
     if not check_prerequisites():
         return
     
@@ -198,18 +207,53 @@ def main():
     logger.info(f"Course Title: {course_info['title']}")
 
     udemy.create_directory(os.path.join(COURSE_DIR))
-    # course_curriculum = udemy.fetch_course_curriculum(course_id)
-    if os.path.isfile(os.path.join(COURSE_DIR, "course.json")):
-        with open(os.path.join(COURSE_DIR, "course.json"), "r") as f:
-            course_curriculum = json.load(f)
+
+    if args.load:
+        if args.load is True and os.path.isfile(os.path.join(HOME_DIR, "course.json")):
+            try:
+                course_curriculum = json.load(open(os.path.join(HOME_DIR, "course.json"), "r"))
+                logger.info(f"Course curriculum loaded from course.json")
+            except json.JSONDecodeError:
+                logger.error("Course curriculum file is not valid JSON.")
+                sys.exit(1)
+        elif args.load:
+            if os.path.isfile(args.load):
+                try:
+                    course_curriculum = json.load(open(args.load, "r"))
+                    logger.info(f"Course curriculum loaded from {args.load}")
+                except json.JSONDecodeError:
+                    logger.error("Course curriculum file is not valid JSON.")
+                    sys.exit(1)
+            else:
+                logger.error("Course curriculum file not found.")
+                sys.exit(1)
+        else:
+            logger.error("Please provide the path to the course curriculum file.")
+            sys.exit(1)
     else:
-        course_curriculum = udemy.fetch_course_curriculum(course_id)
-        with open(os.path.join(COURSE_DIR, "course.json"), 'w') as file:
-            json.dump(course_curriculum, file, indent=4) 
+        try:
+            course_curriculum = udemy.fetch_course_curriculum(course_id)
+        except Exception as e:
+            logger.critical(f"Failed to fetch course curriculum: {e}")
+            sys.exit(1)
+
+    if args.save:
+        if args.save is True:
+            if (os.path.isfile(os.path.join(HOME_DIR, "course.json"))):
+                logger.warning("Course curriculum file already exists. Overwriting")
+            with open(os.path.join(HOME_DIR, "course.json"), "w") as f:
+                json.dump(course_curriculum, f, indent=4)
+                logger.info(f"Course curriculum saved to course.json")
+        elif args.save:
+            if (os.path.isfile(args.save)):
+                logger.warning("Course curriculum file already exists. Overwriting")
+            with open(args.save, "w") as f:
+                json.dump(course_curriculum, f, indent=4)
+                logger.info(f"Course curriculum saved to {args.save}")
 
     udemy.download_course(course_id, course_curriculum)
 
-    logger.info("Download Complete.")    
+    logger.info("Download Complete.")
 
 if __name__ == "__main__":
     main()

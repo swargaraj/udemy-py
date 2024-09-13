@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+import argparse
 
 COURSE_URL = "https://udemy.com/api-2.0/courses/{course_id}/"
 CURRICULUM_URL = "https://udemy.com/api-2.0/courses/{course_id}/subscriber-curriculum-items/"
@@ -45,3 +46,8 @@ logger.addHandler(console_handler)
 file_handler = logging.FileHandler(LOG_FILE_PATH)
 file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s : %(message)s'))
 logger.addHandler(file_handler)
+
+class LoadAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        # Set the value to True if no argument is provided, otherwise set it to the string value.
+        setattr(namespace, self.dest, values if values is not None else True)
