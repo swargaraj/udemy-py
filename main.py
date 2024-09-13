@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import argparse
@@ -121,12 +122,15 @@ class Udemy:
     def download_course(self, course_id, curriculum):
         mindex = 1
         for chapter in curriculum:
+            logger.info(f"Dowloading Chapter: {chapter['title']} ({mindex}/{len(curriculum)})")
             folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
-            self.create_directory(folder_path)
             lindex = 1
             for lecture in chapter['children']:
+                temp_folder_path = os.path.join(folder_path, str(lecture['id']))
+                self.create_directory(temp_folder_path)
                 if lecture['_class'] == 'lecture':
                     lect_info = self.fetch_lecture_info(course_id, lecture['id'])
+                    logger.info(f"Dowloading Lecture: {lecture['title']} ({lindex}/{len(chapter['children'])})")
                     
                     if lecture['is_free']:
                         m3u8_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/x-mpegURL"), None)
@@ -134,14 +138,14 @@ class Udemy:
                             logger.error(f"Could not find m3u8 url for {lecture['title']}")
                             continue
                         else:
-                            download_and_merge_m3u8(self, m3u8_url, folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
+                            download_and_merge_m3u8(self, m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
                     else:
                         mpd_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/dash+xml"), None)
                         if mpd_url is None:
                             logger.error(f"Could not find mpd url for {lecture['title']}")
                             continue
                         else:
-                            download_and_merge_mpd(self, m3u8_url, folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
+                            download_and_merge_mpd(self, m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
                     
                 if lecture['_class'] == 'practice':
                     # TODO
@@ -189,6 +193,13 @@ def main():
 
     udemy.create_directory(os.path.join(COURSE_DIR))
     course_curriculum = udemy.fetch_course_curriculum(course_id)
+
+    # DEBUG
+    # if os.path.isfile(os.path.join(COURSE_DIR, "course.json")):
+    #     with open(os.path.join(COURSE_DIR, "course.json"), "r") as f:
+    #         course_curriculum = json.load(f)
+    # else:
+    #     course_curriculum = udemy.fetch_course_curriculum(course_id)
 
     udemy.download_course(course_id, course_curriculum)
 
