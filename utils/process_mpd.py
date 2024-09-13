@@ -18,7 +18,7 @@ def download_and_merge_mpd(mpd_file_url, download_folder_path, title_of_output_m
     process_mpd(mpd_file_path, download_folder_path, title_of_output_mp4, key, logger)
 
 def process_mpd(mpd_file_path, download_folder_path, output_file_name, key, logger):
-    nm3u8dl_command = f"N_M3u8DL-RE \"{mpd_file_path}\" --save-dir \"{download_folder_path}\" --save-name \"{output_file_name}.mp4\" --auto-select --concurrent-download --key {key} --del-after-done --no-log --log-level ERROR"
+    nm3u8dl_command = f"n_m3u8dl-re \"{mpd_file_path}\" --save-dir \"{download_folder_path}\" --save-name \"{output_file_name}.mp4\" --auto-select --concurrent-download --key {key} --del-after-done --no-log --log-level ERROR"
     os.system(nm3u8dl_command)
 
     files = os.listdir(download_folder_path)
@@ -34,7 +34,7 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, key, logg
 
     output_path = os.path.join(os.path.dirname(download_folder_path), output_file_name)
 
-    ffmpeg_command = f"ffmpeg -i \"{video_path}\" -i \"{audio_path}\" -c:v copy -c:a aac \"{output_path}.mp4"
+    ffmpeg_command = f"ffmpeg -i \"{video_path}\" -i \"{audio_path}\" -c:v copy -c:a aac \"{output_path}.mp4\" -loglevel panic"
     os.system(ffmpeg_command)
 
     logger.info(f"{output_file_name} downloaded successfully")

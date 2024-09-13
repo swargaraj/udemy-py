@@ -32,8 +32,23 @@ class Udemy:
             logger.critical(f"Failed to request \"{url}\": {e}")
 
     def extract_course_id(self, course_url):
-        # TODO
-        return 1452908
+        response = self.request(course_url)
+        content_str = response.content.decode('utf-8')
+
+        meta_match = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', content_str)
+
+        if meta_match:
+            url = meta_match.group(1)
+            number_match = re.search(r'/(\d+)_', url)
+            if number_match:
+                number = number_match.group(1)
+                return number
+            else:
+                logger.error("Failed to extract course ID.")
+                sys.exit(1)
+        else:
+            logger.error("Failed to extract course ID.")
+            sys.exit(1)
         
     def fetch_course(self, course_id):
         response = self.request(COURSE_URL.format(course_id=course_id)).json()
@@ -68,7 +83,6 @@ class Udemy:
 
             url = response.get('next')
 
-            discovered_count = len(all_results)
             pbar.update(len(response.get('results', [])))
 
         if pbar:
@@ -110,7 +124,7 @@ class Udemy:
         return curriculum
     
     def fetch_lecture_info(self, course_id, lecture_id):
-        return self.request(LECTURE_URL.format(course_izd=course_id, lecture_id=lecture_id)).json()
+        return self.request(LECTURE_URL.format(course_id=course_id, lecture_id=lecture_id)).json()
     
     def create_directory(self, path):
         try:
@@ -166,9 +180,9 @@ def check_prerequisites():
         return False
     
     try:
-        subprocess.run(["N_m3u8DL-RE", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        subprocess.run(["n_m3u8dl-re", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     except subprocess.CalledProcessError:
-        logger.error("Error: N_m3u8DL-RE is not installed or not found in the system PATH.")
+        logger.error("Error: n_m3u8dl-re is not installed or not found in the system PATH.")
         return False
 
     return True

@@ -2,7 +2,10 @@ certifi==2024.8.30
 charset-normalizer==3.3.2
 colorama==0.4.6
 idna==3.8
+iso8601==2.1.0
+m3u8==6.0.0
 pathvalidate==3.2.1
+pycryptodome==3.20.0
 requests==2.32.3
 tqdm==4.66.5
 urllib3==2.2.3
