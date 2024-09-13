@@ -5,13 +5,14 @@ import subprocess
 from pathvalidate import sanitize_filename
 
 import re
-import json
 from tqdm import tqdm
 import http.cookiejar as cookielib
 
 import requests
 
 from constants import *
+from utils.process_m3u8 import download_and_merge_m3u8
+from utils.process_mpd import download_and_merge_mpd
 
 class Udemy:
     def __init__(self):
@@ -24,7 +25,7 @@ class Udemy:
     
     def request(self, url):
         try:
-            response = requests.get(url, cookies=cookie_jar).json()
+            response = requests.get(url, cookies=cookie_jar)
             return response
         except Exception as e:
             logger.critical(f"Failed to request \"{url}\": {e}")
@@ -34,7 +35,7 @@ class Udemy:
         return 1452908
         
     def fetch_course(self, course_id):
-        response = self.request(COURSE_URL.format(course_id=course_id))
+        response = self.request(COURSE_URL.format(course_id=course_id)).json()
         
         if response.get('detail') == 'Not found.':
             logging.error("Course not found.")
@@ -47,12 +48,12 @@ class Udemy:
         url = CURRICULUM_URL.format(course_id=course_id)
         total_count = 0
 
-        logger.info("Fetching course curriculum. This may take a while\n")
+        logger.info("Fetching course curriculum. This may take a while")
 
         pbar = None
 
         while url:
-            response = self.request(url)
+            response = self.request(url).json()
 
             if response.get('detail') == 'Not found.':
                 logger.error("Course curriculum not found.")
@@ -72,13 +73,14 @@ class Udemy:
         if pbar:
             pbar.close()
 
-        print("\n")
-        logger.info(f"Discovered {total_count} Course Curriculum items.")
         return self.organize_curriculum(all_results)
     
     def organize_curriculum(self, results):
         curriculum = []
         current_chapter = None
+
+        total_lectures = 0
+        total_practices = 0
 
         for item in results:
             if item['_class'] == 'chapter':
@@ -93,19 +95,64 @@ class Udemy:
             elif item['_class'] in ['lecture', 'practice']:
                 if current_chapter is not None:
                     current_chapter['children'].append(item)
+                    if item['_class'] == 'lecture':
+                        total_lectures += 1
+                    elif item['_class'] == 'practice':
+                        total_practices += 1
                 else:
                     logger.warning("Found lecture or practice without a parent chapter.")
+
+        num_chapters = len(curriculum)
+
+        logger.info(f"Found {num_chapters} Modules, {total_lectures} Lectures & {total_practices} Practices")
 
         return curriculum
     
     def fetch_lecture_info(self, course_id, lecture_id):
-        return self.request(LECTURE_URL.format(course_izd=course_id, lecture_id=lecture_id))    
+        return self.request(LECTURE_URL.format(course_izd=course_id, lecture_id=lecture_id)).json()
+    
+    def create_directory(self, path):
+        try:
+            os.makedirs(path)
+        except FileExistsError:
+            logger.warning(f"Directory {path} already exists")
+            pass
+
+    def download_course(self, course_id, curriculum):
+        mindex = 1
+        for chapter in curriculum:
+            folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
+            self.create_directory(folder_path)
+            lindex = 1
+            for lecture in chapter['children']:
+                if lecture['_class'] == 'lecture':
+                    lect_info = self.fetch_lecture_info(course_id, lecture['id'])
+                    
+                    if lecture['is_free']:
+                        m3u8_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/x-mpegURL"), None)
+                        if m3u8_url is None:
+                            logger.error(f"Could not find m3u8 url for {lecture['title']}")
+                            continue
+                        else:
+                            download_and_merge_m3u8(self, m3u8_url, folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
+                    else:
+                        mpd_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/dash+xml"), None)
+                        if mpd_url is None:
+                            logger.error(f"Could not find mpd url for {lecture['title']}")
+                            continue
+                        else:
+                            download_and_merge_mpd(self, m3u8_url, folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
+                    
+                if lecture['_class'] == 'practice':
+                    # TODO
+                    pass
+                lindex += 1
+            mindex += 1
 
 def check_prerequisites():
     if not os.path.isfile(cookie_path):
         logger.error(f"{cookie_path} not found.")
         return False
-
     try:
         subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     except subprocess.CalledProcessError:
@@ -116,7 +163,7 @@ def check_prerequisites():
 
 def main():
 
-    global course_url, key, cookie_path
+    global course_url, key, cookie_path, COURSE_DIR
 
     parser = argparse.ArgumentParser(description="Udemy Course Downloader")
     parser.add_argument("--url", "-u", type=str, required=True, help="The URL of the Udemy course to download")
@@ -134,15 +181,18 @@ def main():
     
     udemy = Udemy()
 
-    # course_id = udemy.extract_course_id(course_url)
-    # course_info = udemy.fetch_course(course_id)
+    course_id = udemy.extract_course_id(course_url)
+    course_info = udemy.fetch_course(course_id)
+    COURSE_DIR = os.path.join(DOWNLOAD_DIR, sanitize_filename(course_info['title']))
 
-    # logger.info(f"Course Title: {course_info['title']}")
+    logger.info(f"Course Title: {course_info['title']}")
 
-    # course_curriculum = udemy.fetch_course_curriculum(course_id)
+    udemy.create_directory(os.path.join(COURSE_DIR))
+    course_curriculum = udemy.fetch_course_curriculum(course_id)
 
-    # print(udemy.fetch_lecture_info(1452908, 31531812))
-    
+    udemy.download_course(course_id, course_curriculum)
+
+    logger.info("Download Complete.")    
 
 if __name__ == "__main__":
     main()

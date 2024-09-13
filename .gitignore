@@ -2,3 +2,4 @@ __pycache__/
 logs/
 cookies.txt
 venv/
+courses/

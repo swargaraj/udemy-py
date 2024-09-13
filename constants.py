@@ -8,7 +8,7 @@ LECTURE_URL = "https://www.udemy.com/api-2.0/users/me/subscribed-courses/{course
 QUIZ_URL = "https://udemy.com/api-2.0/quizzes/{quiz_id}/assessments/?version=1&page_size=250&fields[assessment]=id,assessment_type,prompt,correct_response,section,question_plain,related_lectures"
 
 HOME_DIR = os.getcwd()
-COURSE_DIR = os.path.join(HOME_DIR, "courses")
+DOWNLOAD_DIR = os.path.join(HOME_DIR, "courses")
 
 LOG_DIR = os.path.join(HOME_DIR, "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
