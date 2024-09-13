@@ -138,14 +138,14 @@ class Udemy:
                             logger.error(f"Could not find m3u8 url for {lecture['title']}")
                             continue
                         else:
-                            download_and_merge_m3u8(self, m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
+                            download_and_merge_m3u8(m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
                     else:
                         mpd_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/dash+xml"), None)
                         if mpd_url is None:
                             logger.error(f"Could not find mpd url for {lecture['title']}")
                             continue
                         else:
-                            download_and_merge_mpd(self, m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
+                            download_and_merge_mpd(mpd_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", key, logger)
                     
                 if lecture['_class'] == 'practice':
                     # TODO
@@ -161,6 +161,12 @@ def check_prerequisites():
         subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     except subprocess.CalledProcessError:
         logger.error("Error: ffmpeg is not installed or not found in the system PATH.")
+        return False
+    
+    try:
+        subprocess.run(["N_m3u8DL-RE", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    except subprocess.CalledProcessError:
+        logger.error("Error: N_m3u8DL-RE is not installed or not found in the system PATH.")
         return False
 
     return True
@@ -192,14 +198,14 @@ def main():
     logger.info(f"Course Title: {course_info['title']}")
 
     udemy.create_directory(os.path.join(COURSE_DIR))
-    course_curriculum = udemy.fetch_course_curriculum(course_id)
-
-    # DEBUG
-    # if os.path.isfile(os.path.join(COURSE_DIR, "course.json")):
-    #     with open(os.path.join(COURSE_DIR, "course.json"), "r") as f:
-    #         course_curriculum = json.load(f)
-    # else:
-    #     course_curriculum = udemy.fetch_course_curriculum(course_id)
+    # course_curriculum = udemy.fetch_course_curriculum(course_id)
+    if os.path.isfile(os.path.join(COURSE_DIR, "course.json")):
+        with open(os.path.join(COURSE_DIR, "course.json"), "r") as f:
+            course_curriculum = json.load(f)
+    else:
+        course_curriculum = udemy.fetch_course_curriculum(course_id)
+        with open(os.path.join(COURSE_DIR, "course.json"), 'w') as file:
+            json.dump(course_curriculum, file, indent=4) 
 
     udemy.download_course(course_id, course_curriculum)
 

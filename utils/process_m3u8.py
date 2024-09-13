@@ -4,8 +4,10 @@ import shutil
 import requests
 from urllib.parse import urlparse
 
-def download_and_merge_m3u8(udemy, m3u8_file_url, download_folder_path, title_of_output_mp4, logger):
-    response = udemy.request(m3u8_file_url)
+def download_and_merge_m3u8(m3u8_file_url, download_folder_path, title_of_output_mp4, logger):
+    response = requests.get(m3u8_file_url)
+    response.raise_for_status()
+    
     m3u8_content = response.text
     m3u8_obj = m3u8.loads(m3u8_content)
     playlists = m3u8_obj.playlists
