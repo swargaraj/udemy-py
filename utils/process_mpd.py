@@ -4,7 +4,7 @@ import subprocess
 import requests
 from urllib.parse import urlparse
 
-def download_and_merge_mpd(mpd_file_url, download_folder_path, title_of_output_mp4, key, logger):
+def download_and_merge_mpd(mpd_file_url, download_folder_path, title_of_output_mp4, key, logger, task_id, progress):
     mpd_filename = os.path.basename(urlparse(mpd_file_url).path)
     mpd_file_path = os.path.join(download_folder_path, mpd_filename)
 
@@ -29,11 +29,7 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, key, logg
     )
     stdout_nm3u8dl, stderr_nm3u8dl = process_nm3u8dl.communicate()
 
-    print("n_m3u8dl Output:", stdout_nm3u8dl)
-    if stderr_nm3u8dl:
-        print("n_m3u8dl Error:", stderr_nm3u8dl)
-    
-    if process_nm3u8dl.returncode != 0:
+    if stderr_nm3u8dl or process_nm3u8dl.returncode != 0:
         logger.critical(f"Error Downloading Video and Audio files of {output_file_name}")
         return
 
@@ -58,8 +54,6 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, key, logg
         ffmpeg_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
     stdout_ffmpeg, stderr_ffmpeg = process_ffmpeg.communicate()
-
-    print("ffmpeg Output:", stdout_ffmpeg)
 
     if stderr_ffmpeg or process_ffmpeg.returncode != 0:
         logger.critical(f"Error Merging Video and Audio files of {output_file_name}")

@@ -1,11 +1,12 @@
-import m3u8
+import re
 import os
+import m3u8
 import shutil
 import requests
 import subprocess
 from urllib.parse import urlparse
 
-def download_and_merge_m3u8(m3u8_file_url, download_folder_path, title_of_output_mp4, logger):
+def download_and_merge_m3u8(m3u8_file_url, download_folder_path, title_of_output_mp4, logger, task_id, progress):
     response = requests.get(m3u8_file_url)
     response.raise_for_status()
     
@@ -36,9 +37,9 @@ def download_and_merge_m3u8(m3u8_file_url, download_folder_path, title_of_output
     with open(m3u8_file_path, 'wb') as file:
         file.write(highest_quality_response.content) 
 
-    merge_segments_into_mp4(m3u8_file_path, download_folder_path, title_of_output_mp4, logger)
+    merge_segments_into_mp4(m3u8_file_path, download_folder_path, title_of_output_mp4, logger, task_id, progress)
 
-def merge_segments_into_mp4(m3u8_file_path, download_folder_path, output_file_name, logger):
+def merge_segments_into_mp4(m3u8_file_path, download_folder_path, output_file_name, logger, task_id, progress):
     output_path = os.path.dirname(download_folder_path)
 
     nm3u8dl_command = (
@@ -47,11 +48,22 @@ def merge_segments_into_mp4(m3u8_file_path, download_folder_path, output_file_na
         f"--del-after-done --no-log --tmp-dir \"{download_folder_path}\" --log-level ERROR"
     )
 
+    pattern = re.compile(r'(\d+\.\d+%)')
     process = subprocess.Popen(nm3u8dl_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-    stdout, stderr = process.communicate()
+    while True:
+        output = process.stdout.readline()
+        if output == '' and process.poll() is not None:
+            break
+        if output:
+            stripped_output = output.strip().replace(' ', '')
+        if stripped_output.startswith('Vid'):
+            matches = pattern.findall(output)
+            if matches:
+                first_percentage = float(matches[0].replace('%', ''))
+                progress.update(task_id, completed=first_percentage)
 
-    print("Output:", stdout)
+    stdout, stderr = process.communicate()
 
     if stderr or process.returncode != 0:
         logger.critical(f"Error Downloading Video and Audio files of {output_file_name}")

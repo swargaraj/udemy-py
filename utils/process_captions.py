@@ -3,7 +3,7 @@ import shutil
 import requests
 from urllib.parse import urlparse
 
-def download_captions(captions, download_folder_path, title_of_output_mp4, captions_list, logger):
+def download_captions(captions, download_folder_path, title_of_output_mp4, captions_list, logger, task_id, progress):
     filtered_captions = [caption for caption in captions if caption["locale_id"] in captions_list]
 
     for caption in filtered_captions:

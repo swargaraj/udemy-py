@@ -4,7 +4,7 @@ import requests
 from urllib.parse import urlparse
 from constants import LINK_ASSET_URL, FILE_ASSET_URL
 
-def process_supplementary_assets(udemy, assets, download_folder_path, course_id, lecture_id, logger):
+def process_supplementary_assets(udemy, assets, download_folder_path, course_id, lecture_id, logger, task_id, progress):
     for asset in assets:
         match asset['asset_type']:
             case 'File':
