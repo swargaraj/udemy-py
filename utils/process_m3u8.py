@@ -2,6 +2,7 @@ import m3u8
 import os
 import shutil
 import requests
+import subprocess
 from urllib.parse import urlparse
 
 def download_and_merge_m3u8(m3u8_file_url, download_folder_path, title_of_output_mp4, logger):
@@ -28,7 +29,6 @@ def download_and_merge_m3u8(m3u8_file_url, download_folder_path, title_of_output
         return
     
     highest_quality_url = highest_quality_playlist.uri
-    logger.info(f"Selected highest quality stream: {max_resolution}")
 
     highest_quality_response = requests.get(highest_quality_url)
     m3u8_file_path = os.path.join(download_folder_path, "index.m3u8")
@@ -39,10 +39,22 @@ def download_and_merge_m3u8(m3u8_file_url, download_folder_path, title_of_output
     merge_segments_into_mp4(m3u8_file_path, download_folder_path, title_of_output_mp4, logger)
 
 def merge_segments_into_mp4(m3u8_file_path, download_folder_path, output_file_name, logger):
-    output_path = os.path.join(os.path.dirname(download_folder_path))
+    output_path = os.path.dirname(download_folder_path)
 
-    nm3u8dl_command = f"n_m3u8dl-re \"{m3u8_file_path}\" --save-dir \"{output_path}\" --save-name \"{output_file_name}\" --auto-select --concurrent-download --del-after-done --no-log --log-level ERROR"
-    os.system(nm3u8dl_command)
+    nm3u8dl_command = (
+        f"n_m3u8dl-re \"{m3u8_file_path}\" --save-dir \"{output_path}\" "
+        f"--save-name \"{output_file_name}\" --auto-select --concurrent-download "
+        f"--del-after-done --no-log --tmp-dir \"{download_folder_path}\" --log-level ERROR"
+    )
 
-    logger.info(f"{output_file_name} downloaded successfully")
+    process = subprocess.Popen(nm3u8dl_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    stdout, stderr = process.communicate()
+
+    print("Output:", stdout)
+
+    if stderr or process.returncode != 0:
+        logger.critical(f"Error Downloading Video and Audio files of {output_file_name}")
+        return
+
     shutil.rmtree(download_folder_path)
