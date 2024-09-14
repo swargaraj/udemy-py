@@ -1,14 +1,14 @@
 import json
 import os
 import sys
-import threading
 import requests
 import argparse
 import subprocess
 from pathvalidate import sanitize_filename
+from rich.console import Console
+from rich.progress import Progress, BarColumn, TextColumn
 
 import re
-from tqdm import tqdm
 import http.cookiejar as cookielib
 from concurrent.futures import ThreadPoolExecutor
 
@@ -16,6 +16,9 @@ from constants import *
 from utils.process_m3u8 import download_and_merge_m3u8
 from utils.process_mpd import download_and_merge_mpd
 from utils.process_captions import download_captions
+from utils.process_assets import process_supplementary_assets
+
+console = Console()
 
 class Udemy:
     def __init__(self):
@@ -29,20 +32,16 @@ class Udemy:
     
     def request(self, url):
         try:
-            response = requests.get(url, cookies=cookie_jar)
+            response = requests.get(url, cookies=cookie_jar, stream=True)
             return response
         except Exception as e:
             logger.critical(f"There was a problem reaching the Udemy server. This could be due to network issues, an invalid URL, or Udemy being temporarily unavailable.")
 
     def extract_course_id(self, course_url):
 
-        logger.info(f"Fetching course ID from {course_url}")
-        stop_event = threading.Event()
-        animation_thread = threading.Thread(target=animate, args=(stop_event, "Trying to Extract course ID", "Course ID extracted"))
-        animation_thread.start()
-        
-        response = self.request(course_url)
-        content_str = response.content.decode('utf-8')
+        with Loader(f"Fetching course ID"):            
+            response = self.request(course_url)
+            content_str = response.content.decode('utf-8')
 
         meta_match = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', content_str)
 
@@ -51,8 +50,6 @@ class Udemy:
             number_match = re.search(r'/(\d+)_', url)
             if number_match:
                 number = number_match.group(1)
-                stop_event.set()
-                animation_thread.join()
                 logger.info(f"Course ID Extracted: {number}")
                 return number
             else:
@@ -82,27 +79,30 @@ class Udemy:
 
         logger.info("Fetching course curriculum. This may take a while")
 
-        pbar = None
+        with Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3}%"),
+            transient=True
+        ) as progress:
+            task = progress.add_task("[cyan]Fetching...", total=total_count)
 
-        while url:
-            response = self.request(url).json()
+            while url:
+                response = self.request(url).json()
 
-            if response.get('detail') == 'Not found.':
-                logger.critical("The course was found, but the curriculum (lectures and materials) could not be retrieved. This could be due to API issues, restrictions on the course, or a malformed course structure.")
-                sys.exit(1)
+                if response.get('detail') == 'Not found.':
+                    logger.critical("The course was found, but the curriculum (lectures and materials) could not be retrieved. This could be due to API issues, restrictions on the course, or a malformed course structure.")
+                    sys.exit(1)
 
-            if total_count == 0:
-                total_count = response.get('count', 0)
-                pbar = tqdm(total=total_count, unit='item', desc='Fetching Course Curriculum')
+                if total_count == 0:
+                    total_count = response.get('count', 0)
+                    progress.update(task, total=total_count)
 
-            all_results.extend(response.get('results', []))
+                results = response.get('results', [])
+                all_results.extend(results)
+                progress.update(task, completed=len(all_results))
 
-            url = response.get('next')
-
-            pbar.update(len(response.get('results', [])))
-
-        if pbar:
-            pbar.close()
+                url = response.get('next')
 
         return self.organize_curriculum(all_results)
     
@@ -132,8 +132,8 @@ class Udemy:
 
         num_chapters = len(curriculum)
 
-        logger.info(f"Chapter(s): {num_chapters}")
-        logger.info(f"Lectures(s): {total_lectures}")
+        logger.info(f"Discovered Chapter(s): {num_chapters}")
+        logger.info(f"Discovered Lectures(s): {total_lectures}")
 
         return curriculum
     
@@ -148,10 +148,10 @@ class Udemy:
         try:
             os.makedirs(path)
         except FileExistsError:
-            logger.warning(f"Directory {path} already exists")
+            logger.warning(f"Directory \"{path}\" already exists")
             pass
         except Exception as e:
-            logger.error(f"Failed to create directory {path}: {e}")
+            logger.error(f"Failed to create directory \"{path}\": {e}")
             sys.exit(1)
 
     def download_course(self, course_id, curriculum):
@@ -167,21 +167,31 @@ class Udemy:
                 logger.info(f"Downloading Lecture: {lecture['title']} ({lindex}/{len(chapter['children'])})")
 
                 if len(lect_info["asset"]["captions"]) > 0:
+                    logger.info(f"Downloading {len(lect_info['asset']['captions'])} captions.")
                     download_captions(lect_info["asset"]["captions"], folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", captions, logger)
+
+                if len(lecture["supplementary_assets"]) > 0:
+                    logger.info(f"Downloading {len(lecture['supplementary_assets'])} supplementary assets.")
+                    process_supplementary_assets(self, lecture["supplementary_assets"], folder_path, course_id, lect_info["id"], logger)
                 
                 if lecture['is_free']:
                     m3u8_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/x-mpegURL"), None)
                     if m3u8_url is None:
-                        logger.error(f"Could not find m3u8 URL for {lecture['title']}")
+                        logger.error(f"The M3U8 URL required for downloading \"{lecture['title']}\" is missing or cannot be located.")
                     else:
                         download_and_merge_m3u8(m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
                 else:
-                    if key is None:
-                        logger.warning("The video appears to be DRM-protected, and it may not play without a valid Widevine decryption key.")
                     mpd_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/dash+xml"), None)
+                    mp4_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "video/mp4"), None)
+                    
                     if mpd_url is None:
-                        logger.error(f"Could not find mpd URL for {lecture['title']}")
+                        if mp4_url is None:
+                            logger.error(f"The MPD URL required for downloading \"{lecture['title']}\" is missing or cannot be located.")
+                        else:
+                            logger.error(f"This lecture appears to be served directly as mp4. We currently do not support downloading this format. Please create a issue on GitHub if you need this feature.")
                     else:
+                        if key is None:
+                            logger.warning("The video appears to be DRM-protected, and it may not play without a valid Widevine decryption key.")
                         download_and_merge_mpd(mpd_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", key, logger)
 
             elif lecture['_class'] == 'practice':
@@ -211,136 +221,137 @@ def check_prerequisites():
             return False
     else:
         if not os.path.isfile(cookie_path):
-            logger.error(f"Error: The provided cookie file path does not exist.")
+            logger.error(f"The provided cookie file path does not exist.")
             return False
 
     try:
         subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     except subprocess.CalledProcessError:
-        logger.error("Error: ffmpeg is not installed or not found in the system PATH.")
+        logger.error("ffmpeg is not installed or not found in the system PATH.")
         return False
     
     try:
         subprocess.run(["n_m3u8dl-re", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     except subprocess.CalledProcessError:
-        logger.error("Error: n_m3u8dl-re is not installed or not found in the system PATH.")
+        logger.error("Make sure mp4decrypt & n_m3u8dl-re is not installed or not found in the system PATH.")
         return False
     
-    if key:
-        try:
-            subprocess.run(["mp4decrypt"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        except subprocess.CalledProcessError:
-            logger.error("Error: mp4decrypt is not installed or not found in the system PATH.")
-            return False
-
     return True
 
 def main():
 
-    global course_url, key, cookie_path, COURSE_DIR, captions
+    try:
+        global course_url, key, cookie_path, COURSE_DIR, captions
 
-    parser = argparse.ArgumentParser(description="Udemy Course Downloader")
-    parser.add_argument("--id", "-i", type=int, required=False, help="The ID of the Udemy course to download")
-    parser.add_argument("--url", "-u", type=str, required=False, help="The URL of the Udemy course to download")
-    parser.add_argument("--key", "-k", type=str, help="Key to decrypt the DRM-protected videos")
-    parser.add_argument("--cookies", "-c", type=str, help="Path to cookies.txt file")
-    parser.add_argument("--load", "-l", help="Load course curriculum from file", action=LoadAction, const=True, nargs='?')
-    parser.add_argument("--save", "-s", help="Save course curriculum to a file", action=LoadAction, const=True, nargs='?')
-    parser.add_argument("--threads", "-t", type=int, default=4, help="Number of threads to use")
-    parser.add_argument("--captions", type=str, help="Specify what captions to download. Separate multiple captions with commas")
-    
-    args = parser.parse_args()
+        parser = argparse.ArgumentParser(description="Udemy Course Downloader")
+        parser.add_argument("--id", "-i", type=int, required=False, help="The ID of the Udemy course to download")
+        parser.add_argument("--url", "-u", type=str, required=False, help="The URL of the Udemy course to download")
+        parser.add_argument("--key", "-k", type=str, help="Key to decrypt the DRM-protected videos")
+        parser.add_argument("--cookies", "-c", type=str, default="cookies.txt", help="Path to cookies.txt file")
+        parser.add_argument("--load", "-l", help="Load course curriculum from file", action=LoadAction, const=True, nargs='?')
+        parser.add_argument("--save", "-s", help="Save course curriculum to a file", action=LoadAction, const=True, nargs='?')
+        parser.add_argument("--threads", "-t", type=int, default=4, help="Number of threads to use")
+        parser.add_argument("--captions", type=str, help="Specify what captions to download. Separate multiple captions with commas")
+        
+        args = parser.parse_args()
 
-    course_url = args.url
+        if len(sys.argv) == 1:
+            print(parser.format_help())
+            sys.exit(0)
+        course_url = args.url
 
-    key = args.key
+        key = args.key
 
-    if not course_url and not args.id:
-        logger.error("You must provide either the course ID with '--id' or the course URL with '--url' to proceed.")
-        return
-    elif course_url and args.id:
-        logger.warning("Both course ID and URL provided. Prioritizing course ID over URL.")
-    
-    if key is not None and not ":" in key:
-        logger.error("The provided Widevine key is either malformed or incorrect. Please check the key and try again.")
-        return
-    
-    cookie_path = args.cookies
+        if not course_url and not args.id:
+            logger.error("You must provide either the course ID with '--id' or the course URL with '--url' to proceed.")
+            return
+        elif course_url and args.id:
+            logger.warning("Both course ID and URL provided. Prioritizing course ID over URL.")
+        
+        if key is not None and not ":" in key:
+            logger.error("The provided Widevine key is either malformed or incorrect. Please check the key and try again.")
+            return
+        
+        if args.cookies:
+            cookie_path = args.cookies
 
-    if not check_prerequisites():
-        return
-    
-    udemy = Udemy()
+        if not check_prerequisites():
+            return
+        
+        udemy = Udemy()
 
-    if args.id:
-        course_id = args.id
-    else:
-        course_id = udemy.extract_course_id(course_url)
+        if args.id:
+            course_id = args.id
+        else:
+            course_id = udemy.extract_course_id(course_url)
 
-    if args.captions:
-        try:
-            captions = args.captions.split(",")
-        except:
-            logger.error("Invalid captions provided. Captions should be separated by commas.")
-    else:
-        captions = ["en_US"]
-    
-    course_info = udemy.fetch_course(course_id)
-    COURSE_DIR = os.path.join(DOWNLOAD_DIR, sanitize_filename(course_info['title']))
-
-    logger.info(f"Course Title: {course_info['title']}")
-
-    udemy.create_directory(os.path.join(COURSE_DIR))
-
-    if args.load:
-        if args.load is True and os.path.isfile(os.path.join(HOME_DIR, "course.json")):
+        if args.captions:
             try:
-                course_curriculum = json.load(open(os.path.join(HOME_DIR, "course.json"), "r"))
-                logger.info(f"The course curriculum is successfully loaded from course.json")
-            except json.JSONDecodeError:
-                logger.error("The course curriculum file provided is either malformed or corrupted.")
-                sys.exit(1)
-        elif args.load:
-            if os.path.isfile(args.load):
+                captions = args.captions.split(",")
+            except:
+                logger.error("Invalid captions provided. Captions should be separated by commas.")
+        else:
+            captions = ["en_US"]
+        
+        course_info = udemy.fetch_course(course_id)
+        COURSE_DIR = os.path.join(DOWNLOAD_DIR, sanitize_filename(course_info['title']))
+
+        logger.info(f"Course Title: {course_info['title']}")
+
+        udemy.create_directory(os.path.join(COURSE_DIR))
+
+        if args.load:
+            if args.load is True and os.path.isfile(os.path.join(HOME_DIR, "course.json")):
                 try:
-                    course_curriculum = json.load(open(args.load, "r"))
-                    logger.info(f"The course curriculum is successfully loaded from {args.load}")
+                    course_curriculum = json.load(open(os.path.join(HOME_DIR, "course.json"), "r"))
+                    logger.info(f"The course curriculum is successfully loaded from course.json")
                 except json.JSONDecodeError:
                     logger.error("The course curriculum file provided is either malformed or corrupted.")
                     sys.exit(1)
+            elif args.load:
+                if os.path.isfile(args.load):
+                    try:
+                        course_curriculum = json.load(open(args.load, "r"))
+                        logger.info(f"The course curriculum is successfully loaded from {args.load}")
+                    except json.JSONDecodeError:
+                        logger.error("The course curriculum file provided is either malformed or corrupted.")
+                        sys.exit(1)
+                else:
+                    logger.error("The course curriculum file could not be located. Please verify the file path and ensure that the file exists.")
+                    sys.exit(1)
             else:
-                logger.error("The course curriculum file could not be located. Please verify the file path and ensure that the file exists.")
+                logger.error("Please provide the path to the course curriculum file.")
                 sys.exit(1)
         else:
-            logger.error("Please provide the path to the course curriculum file.")
-            sys.exit(1)
-    else:
-        try:
-            course_curriculum = udemy.fetch_course_curriculum(course_id)
-        except Exception as e:
-            logger.critical(f"Unable to retrieve the course curriculum. Error: {e}")
-            sys.exit(1)
+            try:
+                course_curriculum = udemy.fetch_course_curriculum(course_id)
+            except Exception as e:
+                logger.critical(f"Unable to retrieve the course curriculum. {e}")
+                sys.exit(1)
 
-    if args.save:
-        if args.save is True:
-            if (os.path.isfile(os.path.join(HOME_DIR, "course.json"))):
-                logger.warning("Course curriculum file already exists. Overwriting the existing file.")
-            with open(os.path.join(HOME_DIR, "course.json"), "w") as f:
-                json.dump(course_curriculum, f, indent=4)
-                logger.info(f"The course curriculum has been successfully saved to course.json")
-        elif args.save:
-            if (os.path.isfile(args.save)):
-                logger.warning("Course curriculum file already exists. Overwriting the existing file.")
-            with open(args.save, "w") as f:
-                json.dump(course_curriculum, f, indent=4)
-                logger.info(f"The course curriculum has been successfully saved to {args.save}")
+        if args.save:
+            if args.save is True:
+                if (os.path.isfile(os.path.join(HOME_DIR, "course.json"))):
+                    logger.warning("Course curriculum file already exists. Overwriting the existing file.")
+                with open(os.path.join(HOME_DIR, "course.json"), "w") as f:
+                    json.dump(course_curriculum, f, indent=4)
+                    logger.info(f"The course curriculum has been successfully saved to course.json")
+            elif args.save:
+                if (os.path.isfile(args.save)):
+                    logger.warning("Course curriculum file already exists. Overwriting the existing file.")
+                with open(args.save, "w") as f:
+                    json.dump(course_curriculum, f, indent=4)
+                    logger.info(f"The course curriculum has been successfully saved to {args.save}")
 
-    logger.info("The course download is starting. Please wait while the materials are being downloaded.")
+        logger.info("The course download is starting. Please wait while the materials are being downloaded.")
 
-    udemy.download_course(course_id, course_curriculum)
+        udemy.download_course(course_id, course_curriculum)
 
-    logger.info("All course materials have been successfully downloaded.")    
-    logger.info("Download Complete.")
+        logger.info("All course materials have been successfully downloaded.")    
+        logger.info("Download Complete.")
+    except KeyboardInterrupt:
+        logger.warning("Process interrupted. Exiting")
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()

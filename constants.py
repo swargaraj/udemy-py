@@ -2,13 +2,16 @@ import os
 import time
 import logging
 import argparse
-import itertools
-import sys
+from itertools import cycle
+from shutil import get_terminal_size
+from threading import Thread
 
 COURSE_URL = "https://udemy.com/api-2.0/courses/{course_id}/"
-CURRICULUM_URL = "https://udemy.com/api-2.0/courses/{course_id}/subscriber-curriculum-items/?page_size=200"
+CURRICULUM_URL = "https://udemy.com/api-2.0/courses/{course_id}/subscriber-curriculum-items/?page_size=200&fields[lecture]=title,object_index,is_published,sort_order,created,asset,supplementary_assets,is_free&fields[quiz]=title,object_index,is_published,sort_order,type&fields[practice]=title,object_index,is_published,sort_order&fields[chapter]=title,object_index,is_published,sort_order&fields[asset]=title,filename,asset_type,status,time_estimation,is_external&caching_intent=True"
 LECTURE_URL = "https://www.udemy.com/api-2.0/users/me/subscribed-courses/{course_id}/lectures/{lecture_id}?fields[lecture]=asset,description,download_url,is_free,last_watched_second&fields[asset]=asset_type,media_sources,captions"
 QUIZ_URL = "https://udemy.com/api-2.0/quizzes/{quiz_id}/assessments/?version=1&page_size=200&fields[assessment]=id,assessment_type,prompt,correct_response,section,question_plain,related_lectures"
+LINK_ASSET_URL = "https://www.udemy.com/api-2.0/users/me/subscribed-courses/{course_id}/lectures/{lecture_id}/supplementary-assets/{asset_id}/?fields[asset]=external_url"
+FILE_ASSET_URL = "https://www.udemy.com/api-2.0/users/me/subscribed-courses/{course_id}/lectures/{lecture_id}/supplementary-assets/{asset_id}/?fields[asset]=download_urls"
 
 HOME_DIR = os.getcwd()
 DOWNLOAD_DIR = os.path.join(HOME_DIR, "courses")
@@ -51,16 +54,39 @@ logger.addHandler(file_handler)
 
 class LoadAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        # Set the value to True if no argument is provided, otherwise set it to the string value.
         setattr(namespace, self.dest, values if values is not None else True)
 
 
-# The animation function
-def animate(stop_event, message, completed_message):
-    for c in itertools.cycle(['|', '/', '-', '\\']):
-        if stop_event.is_set():
-            break
-        sys.stdout.write(f'\r{message} {c}')
-        sys.stdout.flush()
-        time.sleep(0.1)
-    sys.stdout.write(f'\r{completed_message}             \n')
+# Source: https://stackoverflow.com/questions/22029562/python-how-to-make-simple-animated-loading-while-process-is-running
+class Loader:
+    def __init__(self, desc="Processing", timeout=0.1):
+        self.desc = desc
+        self.timeout = timeout
+        self._thread = Thread(target=self._animate, daemon=True)
+        self.steps = ["⢿", "⣻", "⣽", "⣾", "⣷", "⣯", "⣟", "⡿"]
+        self.done = False
+
+    def start(self):
+        self._thread.start()
+        return self
+
+    def _animate(self):
+        for c in cycle(self.steps):
+            if self.done:
+                break
+            print(f"\r{self.desc} {c}", flush=True, end="")
+            time.sleep(self.timeout)
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def stop(self):
+        self.done = True
+        # Clear the spinner line
+        cols = os.get_terminal_size().columns
+        print("\r" + " " * cols, end="", flush=True)
+        print("\r", end="", flush=True)
+
+    def __exit__(self, exc_type, exc_value, tb):
+        self.stop()
