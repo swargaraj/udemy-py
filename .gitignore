@@ -5,3 +5,4 @@ venv/
 courses/
 dist/
 build/
+main.spec
