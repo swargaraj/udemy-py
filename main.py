@@ -195,7 +195,10 @@ class Udemy:
             
             with ThreadPoolExecutor(max_workers=max_concurrent_lectures) as executor:
                 task_generator = (
-                    (mindex, chapter, lindex, lecture)
+                    (f"{mindex:02}" if mindex < 10 else f"{mindex}", 
+                    chapter, 
+                    f"{lindex:02}" if lindex < 10 else f"{lindex}", 
+                    lecture)
                     for mindex, chapter in enumerate(curriculum, start=1)
                     for lindex, lecture in enumerate(chapter['children'], start=1)
                 )
@@ -241,11 +244,10 @@ class Udemy:
                             )
                             tasks[task_id] = (lecture, lect_info, temp_folder_path, lindex, folder_path)
 
-                            # future = executor.submit(
-                            #     self.download_lecture, course_id, lecture, lect_info, temp_folder_path, lindex, folder_path, task_id, progress
-                            # )
+                            future = executor.submit(
+                                self.download_lecture, course_id, lecture, lect_info, temp_folder_path, lindex, folder_path, task_id, progress
+                            )
 
-                            self.download_lecture(course_id, lecture, lect_info, temp_folder_path, lindex, folder_path, task_id, progress)
                             futures.append((task_id, future))
                         except StopIteration:
                             break
