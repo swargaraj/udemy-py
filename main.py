@@ -6,17 +6,18 @@ import argparse
 import subprocess
 from pathvalidate import sanitize_filename
 from rich.console import Console
-from rich.progress import Progress, BarColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 
 import re
 import http.cookiejar as cookielib
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from constants import *
 from utils.process_m3u8 import download_and_merge_m3u8
 from utils.process_mpd import download_and_merge_mpd
 from utils.process_captions import download_captions
-from utils.process_assets import process_supplementary_assets
+from utils.process_assets import download_supplementary_assets
+from utils.process_articles import download_article
 
 console = Console()
 
@@ -83,9 +84,8 @@ class Udemy:
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TextColumn("[progress.percentage]{task.percentage:>3}%"),
-            transient=True
         ) as progress:
-            task = progress.add_task("[cyan]Fetching...", total=total_count)
+            task = progress.add_task(description="Fetching Course Curriculum", total=total_count)
 
             while url:
                 response = self.request(url).json()
@@ -104,6 +104,7 @@ class Udemy:
 
                 url = response.get('next')
 
+            progress.update(task_id = task, description="Fetched Course Curriculum", total=total_count)
         return self.organize_curriculum(all_results)
     
     def organize_curriculum(self, results):
@@ -117,7 +118,6 @@ class Udemy:
                 current_chapter = {
                     'id': item['id'],
                     'title': item['title'],
-                    'description': item['description'],
                     'is_published': item['is_published'],
                     'children': []
                 }
@@ -128,7 +128,7 @@ class Udemy:
                     if item['_class'] == 'lecture':
                         total_lectures += 1
                 else:
-                    logger.warning("Found lecture or practice without a parent chapter.")
+                    logger.warning("Found lecture without a parent chapter.")
 
         num_chapters = len(curriculum)
 
@@ -148,71 +148,107 @@ class Udemy:
         try:
             os.makedirs(path)
         except FileExistsError:
-            logger.warning(f"Directory \"{path}\" already exists")
             pass
         except Exception as e:
             logger.error(f"Failed to create directory \"{path}\": {e}")
             sys.exit(1)
 
-    def download_course(self, course_id, curriculum):
-        mindex = 1
+    def download_lecture(self, course_id, lecture, lect_info, temp_folder_path, lindex, folder_path, task_id, progress):
+        if len(lect_info["asset"]["captions"]) > 0:
+            download_captions(lect_info["asset"]["captions"], folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", captions)
 
-        def process_lecture(lecture, course_id, folder_path, lindex, logger, key):
-            temp_folder_path = os.path.join(folder_path, str(lecture['id']))
-            self.create_directory(temp_folder_path)
+        if len(lecture["supplementary_assets"]) > 0:
+            download_supplementary_assets(self, lecture["supplementary_assets"], folder_path, course_id, lect_info["id"])
 
-            if lecture['_class'] == 'lecture':
-                lect_info = self.fetch_lecture_info(course_id, lecture['id'])
-
-                logger.info(f"Downloading Lecture: {lecture['title']} ({lindex}/{len(chapter['children'])})")
-
-                if len(lect_info["asset"]["captions"]) > 0:
-                    logger.info(f"Downloading {len(lect_info['asset']['captions'])} captions.")
-                    download_captions(lect_info["asset"]["captions"], folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", captions, logger)
-
-                if len(lecture["supplementary_assets"]) > 0:
-                    logger.info(f"Downloading {len(lecture['supplementary_assets'])} supplementary assets.")
-                    process_supplementary_assets(self, lecture["supplementary_assets"], folder_path, course_id, lect_info["id"], logger)
-                
-                if lecture['is_free']:
-                    m3u8_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/x-mpegURL"), None)
-                    if m3u8_url is None:
-                        logger.error(f"The M3U8 URL required for downloading \"{lecture['title']}\" is missing or cannot be located.")
-                    else:
-                        download_and_merge_m3u8(m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", logger)
+        if lect_info['asset']['asset_type'] == "Video":
+            mpd_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/dash+xml"), None)
+            # mp4_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "video/mp4"), None)
+            m3u8_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/x-mpegURL"), None)
+            
+            if mpd_url is None:
+                if m3u8_url is None:
+                    pass
+                    logger.error(f"This lecture appears to be served in different format. We currently do not support downloading this format. Please create an issue on GitHub if you need this feature.")
                 else:
-                    mpd_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/dash+xml"), None)
-                    mp4_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "video/mp4"), None)
-                    
-                    if mpd_url is None:
-                        if mp4_url is None:
-                            logger.error(f"The MPD URL required for downloading \"{lecture['title']}\" is missing or cannot be located.")
-                        else:
-                            logger.error(f"This lecture appears to be served directly as mp4. We currently do not support downloading this format. Please create a issue on GitHub if you need this feature.")
-                    else:
-                        if key is None:
-                            logger.warning("The video appears to be DRM-protected, and it may not play without a valid Widevine decryption key.")
-                        download_and_merge_mpd(mpd_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", key, logger)
+                    download_and_merge_m3u8(m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", task_id, progress)
+            else:
+                if key is None:
+                    logger.warning("The video appears to be DRM-protected, and it may not play without a valid Widevine decryption key.")
+                download_and_merge_mpd(mpd_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", lecture['asset']['time_estimation'], key, task_id, progress)
+        elif lect_info['asset']['asset_type'] == "Article":
+            download_article(self, lect_info['asset'], temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", task_id, progress)
+        else:
+            pass
+            logger.warning(f"Unsupported asset type: {lect_info['asset']['asset_type']}. Skipping.")
 
-            elif lecture['_class'] == 'practice':
-                pass
+    def download_course(self, course_id, curriculum):
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            ElapsedTimeColumn(),
+        ) as progress:
+            
+            tasks = {}
+            futures = []
+            
+            with ThreadPoolExecutor(max_workers=max_concurrent_lectures) as executor:
+                task_generator = (
+                    (mindex, chapter, lindex, lecture)
+                    for mindex, chapter in enumerate(curriculum, start=1)
+                    for lindex, lecture in enumerate(chapter['children'], start=1)
+                )
 
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            for chapter in curriculum:
-                logger.info(f"Downloading Chapter: {chapter['title']} ({mindex}/{len(curriculum)})")
-                folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
-                lindex = 1
+                for _ in range(max_concurrent_lectures):
+                    try:
+                        mindex, chapter, lindex, lecture = next(task_generator)
+                        folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
+                        temp_folder_path = os.path.join(folder_path, str(lecture['id']))
+                        self.create_directory(temp_folder_path)
+                        lect_info = self.fetch_lecture_info(course_id, lecture['id'])
+                        
+                        task_id = progress.add_task(
+                            f"Downloading Lecture: {lecture['title']} ({lindex}/{len(chapter['children'])})", 
+                            total=100
+                        )
+                        tasks[task_id] = (lecture, lect_info, temp_folder_path, lindex, folder_path)
+                        
+                        future = executor.submit(
+                            self.download_lecture, course_id, lecture, lect_info, temp_folder_path, lindex, folder_path, task_id, progress
+                        )
 
-                futures = []
+                        futures.append((task_id, future))
+                    except StopIteration:
+                        break
 
-                for lecture in chapter['children']:
-                    futures.append(executor.submit(process_lecture, lecture, course_id, folder_path, lindex, logger, key))
-                    lindex += 1
+                while futures:
+                    for future in as_completed(f[1] for f in futures):
+                        task_id = next(task_id for task_id, f in futures if f == future)
+                        progress.update(task_id, completed=100)
+                        futures = [f for f in futures if f[1] != future]
 
-                for future in futures:
-                    future.result()
+                        try:
+                            mindex, chapter, lindex, lecture = next(task_generator)
+                            folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
+                            temp_folder_path = os.path.join(folder_path, str(lecture['id']))
+                            self.create_directory(temp_folder_path)
+                            lect_info = self.fetch_lecture_info(course_id, lecture['id'])
 
-                mindex += 1
+                            task_id = progress.add_task(
+                                f"Downloading Lecture: {lecture['title']} ({lindex}/{len(chapter['children'])})",
+                                total=100
+                            )
+                            tasks[task_id] = (lecture, lect_info, temp_folder_path, lindex, folder_path)
+
+                            # future = executor.submit(
+                            #     self.download_lecture, course_id, lecture, lect_info, temp_folder_path, lindex, folder_path, task_id, progress
+                            # )
+
+                            self.download_lecture(course_id, lecture, lect_info, temp_folder_path, lindex, folder_path, task_id, progress)
+                            futures.append((task_id, future))
+                        except StopIteration:
+                            break
 
 def check_prerequisites():
     if not cookie_path:
@@ -241,7 +277,7 @@ def check_prerequisites():
 def main():
 
     try:
-        global course_url, key, cookie_path, COURSE_DIR, captions
+        global course_url, key, cookie_path, COURSE_DIR, captions, max_concurrent_lectures
 
         parser = argparse.ArgumentParser(description="Udemy Course Downloader")
         parser.add_argument("--id", "-i", type=int, required=False, help="The ID of the Udemy course to download")
@@ -250,7 +286,7 @@ def main():
         parser.add_argument("--cookies", "-c", type=str, default="cookies.txt", help="Path to cookies.txt file")
         parser.add_argument("--load", "-l", help="Load course curriculum from file", action=LoadAction, const=True, nargs='?')
         parser.add_argument("--save", "-s", help="Save course curriculum to a file", action=LoadAction, const=True, nargs='?')
-        parser.add_argument("--threads", "-t", type=int, default=4, help="Number of threads to use")
+        parser.add_argument("--concurrent", "-cn", type=int, default=4, help="Maximum number of concurrent downloads")
         parser.add_argument("--captions", type=str, help="Specify what captions to download. Separate multiple captions with commas")
         
         args = parser.parse_args()
@@ -261,6 +297,15 @@ def main():
         course_url = args.url
 
         key = args.key
+
+        if args.concurrent > 25:
+            logger.warning("The maximum number of concurrent downloads is 25. The provided number of concurrent downloads will be capped to 25.")
+            max_concurrent_lectures = 25
+        elif args.concurrent < 1:
+            logger.warning("The minimum number of concurrent downloads is 1. The provided number of concurrent downloads will be capped to 1.")
+            max_concurrent_lectures = 1
+        else:
+            max_concurrent_lectures = args.concurrent
 
         if not course_url and not args.id:
             logger.error("You must provide either the course ID with '--id' or the course URL with '--url' to proceed.")
