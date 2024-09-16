@@ -7,6 +7,7 @@ import subprocess
 from pathvalidate import sanitize_filename
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+from rich.live import Live
 
 import re
 import http.cookiejar as cookielib
@@ -182,41 +183,69 @@ class Udemy:
             logger.warning(f"Unsupported asset type: {lect_info['asset']['asset_type']}. Skipping.")
 
     def download_course(self, course_id, curriculum):
-        with Progress(
+        progress = Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             ElapsedTimeColumn(),
-        ) as progress:
-            
-            tasks = {}
-            futures = []
-            
-            with ThreadPoolExecutor(max_workers=max_concurrent_lectures) as executor:
-                task_generator = (
-                    (f"{mindex:02}" if mindex < 10 else f"{mindex}", 
-                    chapter, 
-                    f"{lindex:02}" if lindex < 10 else f"{lindex}", 
-                    lecture)
-                    for mindex, chapter in enumerate(curriculum, start=1)
-                    for lindex, lecture in enumerate(chapter['children'], start=1)
-                )
+        )
+        
+        tasks = {}
+        futures = []
 
-                for _ in range(max_concurrent_lectures):
+        with ThreadPoolExecutor(max_workers=max_concurrent_lectures) as executor, Live(progress, refresh_per_second=10):
+            task_generator = (
+                (f"{mindex:02}" if mindex < 10 else f"{mindex}", 
+                chapter, 
+                f"{lindex:02}" if lindex < 10 else f"{lindex}", 
+                lecture)
+                for mindex, chapter in enumerate(curriculum, start=1)
+                for lindex, lecture in enumerate(chapter['children'], start=1)
+            )
+
+            for _ in range(max_concurrent_lectures):
+                try:
+                    mindex, chapter, lindex, lecture = next(task_generator)
+                    folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
+                    temp_folder_path = os.path.join(folder_path, str(lecture['id']))
+                    self.create_directory(temp_folder_path)
+                    lect_info = self.fetch_lecture_info(course_id, lecture['id'])
+                    
+                    task_id = progress.add_task(
+                        f"Downloading Lecture: {lecture['title']} ({lindex}/{len(chapter['children'])})", 
+                        total=100
+                    )
+                    tasks[task_id] = (lecture, lect_info, temp_folder_path, lindex, folder_path)
+                    
+                    future = executor.submit(
+                        self.download_lecture, course_id, lecture, lect_info, temp_folder_path, lindex, folder_path, task_id, progress
+                    )
+
+                    futures.append((task_id, future))
+                except StopIteration:
+                    break
+
+            while futures:
+                for future in as_completed(f[1] for f in futures):
+                    task_id = next(task_id for task_id, f in futures if f == future)
+                    future.result()
+                    progress.remove_task(task_id)
+                    futures = [f for f in futures if f[1] != future]
+
                     try:
                         mindex, chapter, lindex, lecture = next(task_generator)
                         folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
                         temp_folder_path = os.path.join(folder_path, str(lecture['id']))
                         self.create_directory(temp_folder_path)
                         lect_info = self.fetch_lecture_info(course_id, lecture['id'])
-                        
+
                         task_id = progress.add_task(
-                            f"Downloading Lecture: {lecture['title']} ({lindex}/{len(chapter['children'])})", 
+                            f"Downloading Lecture: {lecture['title']} ({lindex}/{len(chapter['children'])})",
                             total=100
                         )
                         tasks[task_id] = (lecture, lect_info, temp_folder_path, lindex, folder_path)
-                        
+
                         future = executor.submit(
                             self.download_lecture, course_id, lecture, lect_info, temp_folder_path, lindex, folder_path, task_id, progress
                         )
@@ -224,33 +253,6 @@ class Udemy:
                         futures.append((task_id, future))
                     except StopIteration:
                         break
-
-                while futures:
-                    for future in as_completed(f[1] for f in futures):
-                        task_id = next(task_id for task_id, f in futures if f == future)
-                        progress.update(task_id, completed=100)
-                        futures = [f for f in futures if f[1] != future]
-
-                        try:
-                            mindex, chapter, lindex, lecture = next(task_generator)
-                            folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
-                            temp_folder_path = os.path.join(folder_path, str(lecture['id']))
-                            self.create_directory(temp_folder_path)
-                            lect_info = self.fetch_lecture_info(course_id, lecture['id'])
-
-                            task_id = progress.add_task(
-                                f"Downloading Lecture: {lecture['title']} ({lindex}/{len(chapter['children'])})",
-                                total=100
-                            )
-                            tasks[task_id] = (lecture, lect_info, temp_folder_path, lindex, folder_path)
-
-                            future = executor.submit(
-                                self.download_lecture, course_id, lecture, lect_info, temp_folder_path, lindex, folder_path, task_id, progress
-                            )
-
-                            futures.append((task_id, future))
-                        except StopIteration:
-                            break
 
 def check_prerequisites():
     if not cookie_path:

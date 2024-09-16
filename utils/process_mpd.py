@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from constants import remove_emojis_and_binary, timestamp_to_seconds
 
 def download_and_merge_mpd(mpd_file_url, download_folder_path, title_of_output_mp4, length, key, task_id, progress):
-    progress.update(task_id, description=f"Downloading Stream {remove_emojis_and_binary(title_of_output_mp4)}", completed=0)
+    progress.update(task_id,  description=f"Downloading Stream {remove_emojis_and_binary(title_of_output_mp4)}", completed=0)
     
     mpd_filename = os.path.basename(urlparse(mpd_file_url).path)
     mpd_file_path = os.path.join(download_folder_path, mpd_filename)
@@ -33,7 +33,7 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, length, k
         nm3u8dl_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
 
-    progress.update(task_id, description=f"Merging segments {remove_emojis_and_binary(output_file_name)}", completed=0)
+    progress.update(task_id,  description=f"Merging segments {remove_emojis_and_binary(output_file_name)}", completed=0)
     
     while True:
         output = process_nm3u8dl.stdout.readline()
@@ -46,14 +46,15 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, length, k
             if matches:
                 first_percentage = float(matches[0].replace('%', ''))
                 if first_percentage < 100.0:
-                    progress.update(task_id, completed=first_percentage)
+                    progress.update(task_id,  completed=first_percentage)
                 else:
-                    progress.update(task_id, completed=99)
+                    progress.update(task_id,  completed=99)
 
     stdout_nm3u8dl, stderr_nm3u8dl = process_nm3u8dl.communicate()
 
     if stderr_nm3u8dl or process_nm3u8dl.returncode != 0:
-        progress.update(task_id, completed=100, description=f"[red]Error Downloading Segments {remove_emojis_and_binary(output_file_name)}[/red]")
+        progress.console.log(f"[red]Error Downloading Segments {remove_emojis_and_binary(output_file_name)}[/red] ✕")
+        progress.update(task_id,  completed=100, description=f"[red]Error Downloading Segments {remove_emojis_and_binary(output_file_name)}[/red]")
         return
 
     files = os.listdir(download_folder_path)
@@ -61,10 +62,11 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, length, k
     m4a_files = [f for f in files if f.endswith('.m4a')]
 
     if not mp4_files or not m4a_files:
-        progress.update(task_id, completed=100, description=f"[red]Missing Video and Audio files {output_file_name}[/red]")
+        progress.console.log(f"[red]Missing Video and Audio files {output_file_name}[/red] ✕")
+        progress.update(task_id,  completed=100, description=f"[red]Missing Video and Audio files {output_file_name}[/red]")
         return
 
-    progress.update(task_id, description=f"Merging Video and Audio {remove_emojis_and_binary(output_file_name)}", completed=0)
+    progress.update(task_id,  description=f"Merging Video and Audio {remove_emojis_and_binary(output_file_name)}", completed=0)
     
     video_path = os.path.join(download_folder_path, mp4_files[0])
     audio_path = os.path.join(download_folder_path, m4a_files[0])
@@ -90,13 +92,15 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, length, k
             if match:
                 timestamp = match.group(1)
                 seconds = timestamp_to_seconds(timestamp)
-                progress.update(task_id, completed=(int(seconds) / length) * 100)
+                progress.update(task_id,  completed=(int(seconds) / length) * 100)
 
     stdout_ffmpeg, stderr_ffmpeg = process_ffmpeg.communicate()
 
     if stderr_ffmpeg or process_ffmpeg.returncode != 0:
-        progress.update(task_id, completed=100, description=f"[red]Error Merging Video and Audio files {remove_emojis_and_binary(output_file_name)}[/red]")
+        progress.console.log(f"[red]Error Merging Video and Audio files {remove_emojis_and_binary(output_file_name)}[/red] ✕")
+        progress.update(task_id,  completed=100, description=f"[red]Error Merging Video and Audio files {remove_emojis_and_binary(output_file_name)}[/red]")
         return
 
-    progress.update(task_id, description=f"[green]Downloaded {remove_emojis_and_binary(output_file_name)}[/green]", completed=100)
+    progress.console.log(f"[green]Downloaded {remove_emojis_and_binary(output_file_name)}[/green] ✓")
+    progress.update(task_id,  description=f"[green]Downloaded {remove_emojis_and_binary(output_file_name)}[/green]", completed=100)
     shutil.rmtree(download_folder_path)
