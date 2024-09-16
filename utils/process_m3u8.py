@@ -30,7 +30,7 @@ def download_and_merge_m3u8(m3u8_file_url, download_folder_path, title_of_output
 
     if not highest_quality_playlist:
         progress.console.log(f"No valid playlists {remove_emojis_and_binary(title_of_output_mp4)} ✕")
-        progress.update(task_id,  description=f"No valid playlists {remove_emojis_and_binary(title_of_output_mp4)}", completed=0)
+        progress.remove_task(task_id)
         return
     
     highest_quality_url = highest_quality_playlist.uri
@@ -73,9 +73,9 @@ def merge_segments_into_mp4(m3u8_file_path, download_folder_path, output_file_na
 
     if stderr or process.returncode != 0:
         progress.console.log(f"[red]Error Merging {remove_emojis_and_binary(output_file_name)}[/red] ✕")
-        progress.update(task_id,  completed=100, description=f"[red]Error Merging {remove_emojis_and_binary(output_file_name)}[/red]")
+        progress.remove_task(task_id)
         return
     
     progress.console.log(f"[green]Downloaded {remove_emojis_and_binary(output_file_name)}[/green] ✓")
-    progress.update(task_id,  description=f"[green]Downloaded {remove_emojis_and_binary(output_file_name)}[/green]", completed=100)
+    progress.remove_task(task_id)
     shutil.rmtree(download_folder_path)

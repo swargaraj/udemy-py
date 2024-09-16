@@ -14,6 +14,6 @@ def download_article(udemy, article, download_folder_path, title_of_output_artic
         file.write(article_response['body'])
 
     progress.console.log(f"[green]Downloaded {title_of_output_article}[/green] ✓")
-    progress.update(task_id,  description=f"[green]Downloaded {title_of_output_article}[/green]", completed=100)
+    progress.remove_task(task_id)
 
     shutil.rmtree(download_folder_path)

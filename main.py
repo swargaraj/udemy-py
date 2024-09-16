@@ -91,7 +91,13 @@ class Udemy:
             while url:
                 response = self.request(url).json()
 
+                if response.get('detail') == 'You do not have permission to perform this action.':
+                    progress.update(task, completed=100)
+                    logger.critical("The course was found, but the curriculum (lectures and materials) could not be retrieved. This could be due to API restrictions on the course.")
+                    sys.exit(1)
+
                 if response.get('detail') == 'Not found.':
+                    progress.update(task, completed=100)
                     logger.critical("The course was found, but the curriculum (lectures and materials) could not be retrieved. This could be due to API issues, restrictions on the course, or a malformed course structure.")
                     sys.exit(1)
 
@@ -230,7 +236,10 @@ class Udemy:
                 for future in as_completed(f[1] for f in futures):
                     task_id = next(task_id for task_id, f in futures if f == future)
                     future.result()
-                    progress.remove_task(task_id)
+                    try:
+                        progress.remove_task(task_id)
+                    except:
+                        pass
                     futures = [f for f in futures if f[1] != future]
 
                     try:
