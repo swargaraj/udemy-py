@@ -206,7 +206,10 @@ class Udemy:
         elif not skip_articles and lect_info['asset']['asset_type'] == "Article":
             download_article(self, lect_info['asset'], temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", task_id, progress)
 
-        progress.remove_task(task_id)
+        try:
+            progress.remove_task(task_id)
+        except KeyError:
+            pass
 
     def download_course(self, course_id, curriculum):
         progress = Progress(
