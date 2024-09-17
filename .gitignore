@@ -6,3 +6,4 @@ courses/
 dist/
 build/
 main.spec
+course.json

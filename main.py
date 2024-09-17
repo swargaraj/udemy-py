@@ -8,6 +8,9 @@ from pathvalidate import sanitize_filename
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.live import Live
+from rich.tree import Tree
+from rich.text import Text
+from rich import print as rprint
 
 import re
 import http.cookiejar as cookielib
@@ -82,9 +85,11 @@ class Udemy:
         logger.info("Fetching course curriculum. This may take a while")
 
         with Progress(
+            SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TextColumn("[progress.percentage]{task.percentage:>3}%"),
+            transient=True
         ) as progress:
             task = progress.add_task(description="Fetching Course Curriculum", total=total_count)
 
@@ -92,13 +97,11 @@ class Udemy:
                 response = self.request(url).json()
 
                 if response.get('detail') == 'You do not have permission to perform this action.':
-                    progress.update(task, completed=100)
-                    logger.critical("The course was found, but the curriculum (lectures and materials) could not be retrieved. This could be due to API restrictions on the course.")
+                    progress.console.log("[red]The course was found, but the curriculum (lectures and materials) could not be retrieved. This could be due to API issues, restrictions on the course, or a malformed course structure.[/red]")
                     sys.exit(1)
 
                 if response.get('detail') == 'Not found.':
-                    progress.update(task, completed=100)
-                    logger.critical("The course was found, but the curriculum (lectures and materials) could not be retrieved. This could be due to API issues, restrictions on the course, or a malformed course structure.")
+                    progress.console.log("[red]The course was found, but the curriculum (lectures and materials) could not be retrieved. This could be due to API issues, restrictions on the course, or a malformed course structure.[/red]")
                     sys.exit(1)
 
                 if total_count == 0:
@@ -143,7 +146,25 @@ class Udemy:
         logger.info(f"Discovered Lectures(s): {total_lectures}")
 
         return curriculum
-    
+
+    def build_curriculum_tree(self, data, tree, index=1):
+        for i, item in enumerate(data, start=index):
+            if 'title' in item:
+                title = f"{i:02d}. {item['title']}"
+                if '_class' in item and item['_class'] == 'lecture':
+                    time_estimation = item.get('asset', {}).get('time_estimation')
+                    if time_estimation:
+                        time_str = format_time(time_estimation)
+                        title += f" ({time_str})"
+                    node_text = Text(title, style="cyan")
+                else:
+                    node_text = Text(title, style="magenta")
+                    
+                node = tree.add(node_text)
+                
+                if 'children' in item:
+                    self.build_curriculum_tree(item['children'], node, index=1)
+
     def fetch_lecture_info(self, course_id, lecture_id):
         try:
             return self.request(LECTURE_URL.format(course_id=course_id, lecture_id=lecture_id)).json()
@@ -161,13 +182,13 @@ class Udemy:
             sys.exit(1)
 
     def download_lecture(self, course_id, lecture, lect_info, temp_folder_path, lindex, folder_path, task_id, progress):
-        if len(lect_info["asset"]["captions"]) > 0:
+        if not skip_captions and len(lect_info["asset"]["captions"]) > 0:
             download_captions(lect_info["asset"]["captions"], folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", captions)
 
-        if len(lecture["supplementary_assets"]) > 0:
+        if not skip_assets and len(lecture["supplementary_assets"]) > 0:
             download_supplementary_assets(self, lecture["supplementary_assets"], folder_path, course_id, lect_info["id"])
 
-        if lect_info['asset']['asset_type'] == "Video":
+        if not skip_lectures and lect_info['asset']['asset_type'] == "Video":
             mpd_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/dash+xml"), None)
             # mp4_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "video/mp4"), None)
             m3u8_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/x-mpegURL"), None)
@@ -182,11 +203,10 @@ class Udemy:
                 if key is None:
                     logger.warning("The video appears to be DRM-protected, and it may not play without a valid Widevine decryption key.")
                 download_and_merge_mpd(mpd_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", lecture['asset']['time_estimation'], key, task_id, progress)
-        elif lect_info['asset']['asset_type'] == "Article":
+        elif not skip_articles and lect_info['asset']['asset_type'] == "Article":
             download_article(self, lect_info['asset'], temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", task_id, progress)
-        else:
-            pass
-            logger.warning(f"Unsupported asset type: {lect_info['asset']['asset_type']}. Skipping.")
+
+        progress.remove_task(task_id)
 
     def download_course(self, course_id, curriculum):
         progress = Progress(
@@ -290,7 +310,7 @@ def check_prerequisites():
 def main():
 
     try:
-        global course_url, key, cookie_path, COURSE_DIR, captions, max_concurrent_lectures
+        global course_url, key, cookie_path, COURSE_DIR, captions, max_concurrent_lectures, skip_captions, skip_assets, skip_lectures, skip_articles, skip_assignments
 
         parser = argparse.ArgumentParser(description="Udemy Course Downloader")
         parser.add_argument("--id", "-i", type=int, required=False, help="The ID of the Udemy course to download")
@@ -301,6 +321,14 @@ def main():
         parser.add_argument("--save", "-s", help="Save course curriculum to a file", action=LoadAction, const=True, nargs='?')
         parser.add_argument("--concurrent", "-cn", type=int, default=4, help="Maximum number of concurrent downloads")
         parser.add_argument("--captions", type=str, help="Specify what captions to download. Separate multiple captions with commas")
+        
+        parser.add_argument("--tree", help="Create a tree view of the course curriculum", action=LoadAction, nargs='?')
+
+        parser.add_argument("--skip-captions", type=bool, default=False, help="Skip downloading captions", action=LoadAction, nargs='?')
+        parser.add_argument("--skip-assets", type=bool, default=False, help="Skip downloading assets", action=LoadAction, nargs='?')
+        parser.add_argument("--skip-lectures", type=bool, default=False, help="Skip downloading lectures", action=LoadAction, nargs='?')
+        parser.add_argument("--skip-articles", type=bool, default=False, help="Skip downloading articles", action=LoadAction, nargs='?')
+        parser.add_argument("--skip-assignments", type=bool, default=False, help="Skip downloading assignments", action=LoadAction, nargs='?')
         
         args = parser.parse_args()
 
@@ -350,7 +378,13 @@ def main():
                 logger.error("Invalid captions provided. Captions should be separated by commas.")
         else:
             captions = ["en_US"]
-        
+
+        skip_captions = args.skip_captions
+        skip_assets = args.skip_assets
+        skip_lectures = args.skip_lectures
+        skip_articles = args.skip_articles
+        skip_assignments = args.skip_assignments
+
         course_info = udemy.fetch_course(course_id)
         COURSE_DIR = os.path.join(DOWNLOAD_DIR, sanitize_filename(course_info['title']))
 
@@ -401,9 +435,28 @@ def main():
                     json.dump(course_curriculum, f, indent=4)
                     logger.info(f"The course curriculum has been successfully saved to {args.save}")
 
+        if args.tree:
+            root_tree = Tree(course_info['title'], style="green")
+            udemy.build_curriculum_tree(course_curriculum, root_tree)
+            rprint(root_tree)
+            if args.tree is True:
+                pass
+            elif args.tree:
+                if (os.path.isfile(args.tree)):
+                    logger.warning("Course Curriculum Tree file already exists. Overwriting the existing file.")
+                with open(args.tree, "w") as f:
+                    rprint(root_tree, file=f)
+                    logger.info(f"The course curriculum tree has been successfully saved to {args.tree}")
+
         logger.info("The course download is starting. Please wait while the materials are being downloaded.")
 
+        start_time = time.time()
         udemy.download_course(course_id, course_curriculum)
+        end_time = time.time()
+
+        elapsed_time = end_time - start_time
+        
+        logger.info(f"Download finished in {format_time(elapsed_time)}")
 
         logger.info("All course materials have been successfully downloaded.")    
         logger.info("Download Complete.")

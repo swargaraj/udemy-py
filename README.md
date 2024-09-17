@@ -47,8 +47,11 @@ python .\main.py --url "https://www.udemy.com/course/example-course" --key decry
 ## Advance Usage
 
 ```
-usage: main.py [-h] [--id ID] [--url URL] [--key KEY] [--cookies COOKIES] [--load [LOAD]] [--save [SAVE]]
-               [--concurrent CONCURRENT] [--captions CAPTIONS]
+usage: main.py [-h] [--id ID] [--url URL] [--key KEY] [--cookies COOKIES] [--load [LOAD]] [--save [SAVE]] [--concurrent CONCURRENT]
+               [--captions CAPTIONS] [--tree [TREE]] [--skip-captions [SKIP_CAPTIONS]] [--skip-assets [SKIP_ASSETS]]
+               [--skip-lectures [SKIP_LECTURES]] [--skip-articles [SKIP_ARTICLES]] [--skip-assignments [SKIP_ASSIGNMENTS]]
+
+Udemy Course Downloader
 
 options:
   -h, --help            show this help message and exit
@@ -64,6 +67,17 @@ options:
   --concurrent CONCURRENT, -cn CONCURRENT
                         Maximum number of concurrent downloads
   --captions CAPTIONS   Specify what captions to download. Separate multiple captions with commas
+  --tree [TREE]         Create a tree view of the course curriculum
+  --skip-captions [SKIP_CAPTIONS]
+                        Skip downloading captions
+  --skip-assets [SKIP_ASSETS]
+                        Skip downloading assets
+  --skip-lectures [SKIP_LECTURES]
+                        Skip downloading lectures
+  --skip-articles [SKIP_ARTICLES]
+                        Skip downloading articles
+  --skip-assignments [SKIP_ASSIGNMENTS]
+                        Skip downloading assignments
 ```
 
 ## License

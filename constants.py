@@ -136,3 +136,8 @@ def timestamp_to_seconds(timestamp):
     seconds, fraction = seconds.split('.')
     total_seconds = int(hours) * 3600 + int(minutes) * 60 + int(seconds) + int(fraction) / 100
     return total_seconds
+
+def format_time(seconds):
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours}hr {minutes}min {seconds}s" if hours > 0 else f"{minutes}min {seconds}s"
