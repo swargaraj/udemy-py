@@ -31,7 +31,7 @@ To use this tool, you'll need to set up a few prerequisites:
 You need to provide Udemy cookies to authenticate your requests. To extract these cookies:
 - Use the [Cookie Editor extension](https://cookie-editor.com/) (available for Chrome or Firefox).
 - Extract the cookies as a Netscape format.
-- Save the extracted cookies as `cookie.txt` and place this file in the same directory where you execute the tool.
+- Save the extracted cookies as `cookies.txt` and place this file in the same directory where you execute the tool.
 
 ### Decryption Key
 If you're dealing with DRM-protected videos, you'll need a decryption key. This key is essential for decrypting such content.
@@ -41,7 +41,7 @@ If you're dealing with DRM-protected videos, you'll need a decryption key. This 
 ## Example Usage
 
 ```
-python .\main.py --url "https://www.udemy.com/course/example-course" --key decryption_key --cookie /path/to/cookie.txt --concurrent 8 --captions en_US
+python .\main.py --url "https://www.udemy.com/course/example-course" --key decryption_key --cookies /path/to/cookie.txt --concurrent 8 --captions en_US
 ```
 
 ## Advance Usage
