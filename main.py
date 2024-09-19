@@ -14,6 +14,7 @@ from rich import print as rprint
 
 import re
 import http.cookiejar as cookielib
+import browser_cookie3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from constants import *
@@ -29,8 +30,11 @@ class Udemy:
     def __init__(self):
         global cookie_jar
         try:
-            cookie_jar = cookielib.MozillaCookieJar(cookie_path)
-            cookie_jar.load()
+            if cj:
+                cookie_jar = cj
+            else:
+                cookie_jar = cookielib.MozillaCookieJar(cookie_path)
+                cookie_jar.load()
         except Exception as e:
             logger.critical(f"The provided cookie file could not be read or is incorrectly formatted. Please ensure the file is in the correct format and contains valid authentication cookies.")
             sys.exit(1)
@@ -287,9 +291,19 @@ class Udemy:
                         break
 
 def check_prerequisites():
-    if not cookie_path:
+    global cj
+
+    if browser:
+        if browser == 'firefox':
+            cj = browser_cookie3.firefox()
+        elif browser == 'chrome':
+            cj = browser_cookie3.chrome()
+        else:
+            logger.error(f"Unsupported browser: {browser}")
+            return False
+    elif not cookie_path:
         if not os.path.isfile(os.path.join(HOME_DIR, "cookies.txt")):
-            logger.error(f"Please provide a valid cookie file using the '--cookie' option.")
+            logger.error(f"Please provide a valid cookie file using the '--cookies' option.")
             return False
     else:
         if not os.path.isfile(cookie_path):
@@ -313,13 +327,14 @@ def check_prerequisites():
 def main():
 
     try:
-        global course_url, key, cookie_path, COURSE_DIR, captions, max_concurrent_lectures, skip_captions, skip_assets, skip_lectures, skip_articles, skip_assignments
+        global course_url, key, cookie_path, COURSE_DIR, captions, max_concurrent_lectures, skip_captions, skip_assets, skip_lectures, skip_articles, skip_assignments, browser
 
         parser = argparse.ArgumentParser(description="Udemy Course Downloader")
         parser.add_argument("--id", "-i", type=int, required=False, help="The ID of the Udemy course to download")
         parser.add_argument("--url", "-u", type=str, required=False, help="The URL of the Udemy course to download")
         parser.add_argument("--key", "-k", type=str, help="Key to decrypt the DRM-protected videos")
-        parser.add_argument("--cookies", "-c", type=str, default="cookies.txt", help="Path to cookies.txt file")
+        parser.add_argument("--cookies", "-c", type=str, default=os.path.join(HOME_DIR, "cookies.txt"), required=False, help="Path to cookies.txt file")
+        parser.add_argument("--browser", "-b", type=str, required=False, help="Browser to extract cookie from")
         parser.add_argument("--load", "-l", help="Load course curriculum from file", action=LoadAction, const=True, nargs='?')
         parser.add_argument("--save", "-s", help="Save course curriculum to a file", action=LoadAction, const=True, nargs='?')
         parser.add_argument("--concurrent", "-cn", type=int, default=4, help="Maximum number of concurrent downloads")
@@ -363,6 +378,9 @@ def main():
         
         if args.cookies:
             cookie_path = args.cookies
+
+        if args.browser:
+            browser = args.browser
 
         if not check_prerequisites():
             return
