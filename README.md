@@ -14,7 +14,7 @@
 To use this tool, you need to install some third-party software and Python modules. Follow the instructions below to set up your environment:
 ### Third-Party Software
 1. [FFmpeg](https://www.ffmpeg.org/download.html): This tool is required for handling multimedia files. You can download it from [FFmpeg's official website](https://www.ffmpeg.org/download.html) and follow the installation instructions specific to your operating system.
-2. [n_m3u8_dl-re](https://github.com/nilaoda/N_m3u8DL-RE/releases): This tool is used for downloading and processing m3u8 & mpd streams. You can find it on GitHub at [n_m3u8_dl-re](https://github.com/nilaoda/N_m3u8DL-RE/releases). Make sure to rename the downloaded binary to n_m3u8_dl-re (case-sensitive) for compatibility with this tool.
+2. [n_m3u8_dl-re](https://github.com/nilaoda/N_m3u8DL-RE/releases): This tool is used for downloading and processing m3u8 & mpd streams. Make sure to rename the downloaded binary to n_m3u8_dl-re (case-sensitive) for compatibility with this tool. You can find it on GitHub at [n_m3u8_dl-re](https://github.com/nilaoda/N_m3u8DL-RE/releases).
 3. [MP4 Decrypt](https://www.bento4.com/downloads/): This software is necessary for decrypting MP4 files. You can download their SDK from their [official site](https://www.bento4.com/downloads/).
 
 ### Python Modules
