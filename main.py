@@ -132,7 +132,7 @@ class Udemy:
                     'children': []
                 }
                 curriculum.append(current_chapter)
-            elif item['_class'] in ['lecture', 'practice']:
+            elif item['_class'] == 'lecture':
                 if current_chapter is not None:
                     current_chapter['children'].append(item)
                     if item['_class'] == 'lecture':
