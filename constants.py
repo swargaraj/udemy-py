@@ -141,3 +141,13 @@ def format_time(seconds):
     hours, remainder = divmod(seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     return f"{hours}hr {minutes}min {seconds}s" if hours > 0 else f"{minutes}min {seconds}s"
+
+def is_valid_chapter(mindex, start_chapter, end_chapter):
+    return start_chapter <= mindex <= end_chapter
+
+def is_valid_lecture(mindex, lindex, start_chapter, start_lecture, end_chapter, end_lecture):
+    if mindex == start_chapter and lindex < start_lecture:
+        return False
+    if mindex == end_chapter and lindex > end_lecture:
+        return False
+    return True
