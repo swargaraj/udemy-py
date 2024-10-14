@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from constants import remove_emojis_and_binary, timestamp_to_seconds
 
 def download_and_merge_mpd(mpd_file_url, download_folder_path, title_of_output_mp4, length, key, task_id, progress):
-    progress.update(task_id,  description=f"Downloading Stream {remove_emojis_and_binary(title_of_output_mp4)}", completed=0)
+    progress.update(task_id,  description=f"Downloading Stream {remove_emojis_and_binary(title_of_output_mp4)} [DASH]", completed=0)
     
     mpd_filename = os.path.basename(urlparse(mpd_file_url).path)
     mpd_file_path = os.path.join(download_folder_path, mpd_filename)
@@ -33,7 +33,7 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, length, k
         nm3u8dl_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
 
-    progress.update(task_id,  description=f"Merging segments {remove_emojis_and_binary(output_file_name)}", completed=0)
+    progress.update(task_id,  description=f"Merging segments {remove_emojis_and_binary(output_file_name)} [DASH]", completed=0)
     
     while True:
         output = process_nm3u8dl.stdout.readline()
@@ -53,7 +53,7 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, length, k
     stdout_nm3u8dl, stderr_nm3u8dl = process_nm3u8dl.communicate()
 
     if stderr_nm3u8dl or process_nm3u8dl.returncode != 0:
-        progress.console.log(f"[red]Error Downloading Segments {remove_emojis_and_binary(output_file_name)}[/red] ✕")
+        progress.console.log(f"[red]Error Downloading Segments {remove_emojis_and_binary(output_file_name)} [DASH][/red] ✕")
         progress.remove_task(task_id)
         return
 
@@ -62,11 +62,11 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, length, k
     m4a_files = [f for f in files if f.endswith('.m4a')]
 
     if not mp4_files or not m4a_files:
-        progress.console.log(f"[red]Missing Video and Audio files {output_file_name}[/red] ✕")
+        progress.console.log(f"[red]Missing Video and Audio files {output_file_name} [DASH][/red] ✕")
         progress.remove_task(task_id)
         return
 
-    progress.update(task_id,  description=f"Merging Video and Audio {remove_emojis_and_binary(output_file_name)}", completed=0)
+    progress.update(task_id,  description=f"Merging Video and Audio {remove_emojis_and_binary(output_file_name)} [DASH]", completed=0)
     
     video_path = os.path.join(download_folder_path, mp4_files[0])
     audio_path = os.path.join(download_folder_path, m4a_files[0])
@@ -97,10 +97,10 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, length, k
     stdout_ffmpeg, stderr_ffmpeg = process_ffmpeg.communicate()
 
     if stderr_ffmpeg or process_ffmpeg.returncode != 0:
-        progress.console.log(f"[red]Error Merging Video and Audio files {remove_emojis_and_binary(output_file_name)}[/red] ✕")
+        progress.console.log(f"[red]Error Merging Video and Audio files {remove_emojis_and_binary(output_file_name)} [DASH][/red] ✕")
         progress.remove_task(task_id)
         return
 
-    progress.console.log(f"[green]Downloaded {remove_emojis_and_binary(output_file_name)}[/green] ✓")
+    progress.console.log(f"[green]Downloaded {remove_emojis_and_binary(output_file_name)} [DASH][/green] ✓")
     progress.remove_task(task_id)
     shutil.rmtree(download_folder_path)

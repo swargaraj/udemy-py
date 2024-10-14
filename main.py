@@ -238,7 +238,7 @@ class Udemy:
             for _ in range(max_concurrent_lectures):
                 try:
                     mindex, chapter, lindex, lecture = next(task_generator)
-                    folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
+                    folder_path = os.path.join(COURSE_DIR, f"{mindex}. {remove_emojis_and_binary(sanitize_filename(chapter['title']))}")
                     temp_folder_path = os.path.join(folder_path, str(lecture['id']))
                     self.create_directory(temp_folder_path)
                     lect_info = self.fetch_lecture_info(course_id, lecture['id'])
@@ -269,7 +269,7 @@ class Udemy:
 
                     try:
                         mindex, chapter, lindex, lecture = next(task_generator)
-                        folder_path = os.path.join(COURSE_DIR, f"{mindex}. {sanitize_filename(chapter['title'])}")
+                        folder_path = os.path.join(COURSE_DIR, f"{mindex}. {remove_emojis_and_binary(sanitize_filename(chapter['title']))}")
                         temp_folder_path = os.path.join(folder_path, str(lecture['id']))
                         self.create_directory(temp_folder_path)
                         lect_info = self.fetch_lecture_info(course_id, lecture['id'])
@@ -398,7 +398,7 @@ def main():
         skip_assignments = args.skip_assignments
 
         course_info = udemy.fetch_course(course_id)
-        COURSE_DIR = os.path.join(DOWNLOAD_DIR, sanitize_filename(course_info['title']))
+        COURSE_DIR = os.path.join(DOWNLOAD_DIR, remove_emojis_and_binary(sanitize_filename(course_info['title'])))
 
         logger.info(f"Course Title: {course_info['title']}")
 
