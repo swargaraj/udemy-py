@@ -24,7 +24,7 @@ def process_mpd(mpd_file_path, download_folder_path, output_file_name, length, k
     nm3u8dl_command = (
         f"n_m3u8dl-re \"{mpd_file_path}\" --save-dir \"{download_folder_path}\" "
         f"--save-name \"{output_file_name}.mp4\" --auto-select --concurrent-download "
-        f"--key {key} --del-after-done --no-log --tmp-dir \"{output_path}\" "
+        f"--key {key} --del-after-done --no-log --tmp-dir \"{download_folder_path}\" "
         f"--log-level ERROR"
     )
 
