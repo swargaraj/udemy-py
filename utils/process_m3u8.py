@@ -51,7 +51,7 @@ def merge_segments_into_mp4(m3u8_file_path, download_folder_path, output_file_na
     nm3u8dl_command = (
         f"n_m3u8dl-re \"{m3u8_file_path}\" --save-dir \"{output_path}\" "
         f"--save-name \"{output_file_name}\" --auto-select --concurrent-download "
-        f"--del-after-done --no-log --tmp-dir \"{download_folder_path}\" --log-level ERROR"
+        f"--del-after-done --no-log --tmp-dir \"{output_path}\" --log-level ERROR"
     )
 
     pattern = re.compile(r'(\d+\.\d+%)')
