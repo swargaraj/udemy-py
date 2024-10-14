@@ -472,6 +472,9 @@ def main():
             else:
                 logger.error("When using --start-lecture please provide --start-chapter")
                 sys.exit(1)
+        elif args.start_chapter:
+            start_chapter = args.start_chapter
+            start_lecture = 0
         else:
             start_chapter = 0
             start_lecture = 0
@@ -483,8 +486,11 @@ def main():
             elif args.end_chapter:
                 logger.error("When using --end-lecture please provide --end-chapter")
                 sys.exit(1)
+        elif args.end_chapter:
+            end_chapter = args.end_chapter
+            end_lecture = 1000
         else:
-            end_chapter = len(course_curriculum) - 1
+            end_chapter = len(course_curriculum)
             end_lecture = 1000
 
         logger.info("The course download is starting. Please wait while the materials are being downloaded.")
