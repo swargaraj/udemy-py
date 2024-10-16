@@ -22,6 +22,7 @@ from utils.process_mpd import download_and_merge_mpd
 from utils.process_captions import download_captions
 from utils.process_assets import download_supplementary_assets
 from utils.process_articles import download_article
+from utils.process_mp4 import download_mp4
 
 console = Console()
 
@@ -190,13 +191,15 @@ class Udemy:
 
         if not skip_lectures and lect_info['asset']['asset_type'] == "Video":
             mpd_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/dash+xml"), None)
-            # mp4_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "video/mp4"), None)
+            mp4_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "video/mp4"), None)
             m3u8_url = next((item['src'] for item in lect_info['asset']['media_sources'] if item['type'] == "application/x-mpegURL"), None)
             
             if mpd_url is None:
                 if m3u8_url is None:
-                    pass
-                    logger.error(f"This lecture appears to be served in different format. We currently do not support downloading this format. Please create an issue on GitHub if you need this feature.")
+                    if mp4_url is None:
+                        logger.error(f"This lecture appears to be served in different format. We currently do not support downloading this format. Please create an issue on GitHub if you need this feature.")
+                    else:
+                        download_mp4(mp4_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", task_id, progress)
                 else:
                     download_and_merge_m3u8(m3u8_url, temp_folder_path, f"{lindex}. {sanitize_filename(lecture['title'])}", task_id, progress)
             else:
