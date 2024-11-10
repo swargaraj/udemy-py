@@ -7,3 +7,4 @@ dist/
 build/
 main.spec
 course.json
+.mypy_cache/
