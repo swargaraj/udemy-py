@@ -18,7 +18,7 @@ def download_and_merge_m3u8(
         completed=0,
     )
 
-    response = requests.get(m3u8_file_url)
+    response = requests.get(m3u8_file_url, timeout=10)
     response.raise_for_status()
 
     m3u8_content = response.text
@@ -48,7 +48,7 @@ def download_and_merge_m3u8(
 
     highest_quality_url = highest_quality_playlist.uri
 
-    highest_quality_response = requests.get(highest_quality_url)
+    highest_quality_response = requests.get(highest_quality_url, timeout=10)
     m3u8_file_path = os.path.join(download_folder_path, "index.m3u8")
 
     with open(m3u8_file_path, "wb") as file:
@@ -90,14 +90,13 @@ def merge_segments_into_mp4(
         if output == "" and process.poll() is not None:
             break
         if output:
-            stripped_output = output.strip().replace(" ", "")
-        if stripped_output.startswith("Vid"):
-            matches = pattern.findall(output)
-            if matches:
-                first_percentage = float(matches[0].replace("%", ""))
-                progress.update(task_id, completed=first_percentage)
+            if output.strip().replace(" ", "").startswith("Vid"):
+                matches = pattern.findall(output)
+                if matches:
+                    first_percentage = float(matches[0].replace("%", ""))
+                    progress.update(task_id, completed=first_percentage)
 
-    stdout, stderr = process.communicate()
+    _, stderr = process.communicate()
 
     if stderr or process.returncode != 0:
         progress.console.log(

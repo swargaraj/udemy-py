@@ -32,7 +32,7 @@ class LogFormatter(logging.Formatter):
             "SUCCESS": Back.GREEN,
             "WARNING": Back.YELLOW,
             "ERROR": Back.RED,
-            "CRITICAL": Back.MAGENTA,
+            "CRITICAL": Back.RED,
             "DEBUG": Back.CYAN,
         }
 

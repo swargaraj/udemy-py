@@ -19,6 +19,8 @@ class UdemySettings:
 
 @dataclass
 class DownloadSettings:
+    course_id: int
+    COURSE_DIR: str
     max_concurrent_lectures: int
     start_chapter: Optional[int] = None
     end_chapter: Optional[int] = None

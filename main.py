@@ -114,6 +114,7 @@ def main():
         logger.info("Course Title: %s", course_info["title"])
 
         udemy.create_directory(COURSE_DIR)
+        course_curriculum = None
 
         if args.load:
             load_path = (
@@ -122,7 +123,7 @@ def main():
                 else os.path.join(HOME_DIR, "course.json")
             )
 
-            if not os.path.isfile(load_path):
+            if load_path and not os.path.isfile(load_path):
                 logger.error(
                     """The course curriculum file could not be located at %s. Please verify the file path
                     and ensure that the file exists.""",
@@ -130,20 +131,20 @@ def main():
                 )
                 sys.exit(1)
 
-            try:
-                with open(load_path, "r", encoding="utf-8") as file:
-                    course_curriculum = json.load(file)
-                    logger.success(
-                        "The course curriculum has been successfully loaded from %s",
+            if load_path:
+                try:
+                    with open(load_path, "r", encoding="utf-8") as file:
+                        course_curriculum = json.load(file)
+                        logger.success(
+                            "The course curriculum has been successfully loaded from %s",
+                            load_path,
+                        )
+                except json.JSONDecodeError:
+                    logger.error(
+                        "The course curriculum file at %s is either malformed or corrupted.",
                         load_path,
                     )
-            except json.JSONDecodeError:
-                logger.error(
-                    "The course curriculum file at %s is either malformed or corrupted.",
-                    load_path,
-                )
-                sys.exit(1)
-
+                    sys.exit(1)
         else:
             try:
                 course_curriculum = udemy.fetch_course_curriculum(course_id)
@@ -162,19 +163,19 @@ def main():
             else os.path.join(HOME_DIR, "course.json")
         )
 
-        if os.path.isfile(save_path):
+        if save_path and os.path.isfile(save_path):
             logger.warning(
                 """Course curriculum file already exists at %s.
                            Overwriting the existing file.""",
                 save_path,
             )
 
-        with open(save_path, "w", encoding="utf-8") as f:
-            json.dump(course_curriculum, f, indent=4)
-
-        logger.success(
-            "The course curriculum has been successfully saved to %s", save_path
-        )
+        if save_path is not None:
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(course_curriculum, f, indent=4)
+            logger.success(
+                "The course curriculum has been successfully saved to %s", save_path
+            )
 
         if args.tree:
             root_tree = Tree(course_info["title"], style="green")
@@ -226,6 +227,8 @@ def main():
         )
 
         settings = DownloadSettings(
+            course_id=course_id,
+            COURSE_DIR=COURSE_DIR,
             max_concurrent_lectures=max_concurrent_lectures,
             start_chapter=start_chapter,
             end_chapter=end_chapter,

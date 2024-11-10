@@ -27,7 +27,7 @@ def download_and_merge_mpd(
     mpd_filename = os.path.basename(urlparse(mpd_file_url).path)
     mpd_file_path = os.path.join(download_folder_path, mpd_filename)
 
-    response = requests.get(mpd_file_url)
+    response = requests.get(mpd_file_url, timeout=15)
     response.raise_for_status()
 
     with open(mpd_file_path, "wb") as file:
@@ -80,17 +80,16 @@ def process_mpd(
         if output == "" and process_nm3u8dl.poll() is not None:
             break
         if output:
-            stripped_output = output.strip().replace(" ", "")
-        if stripped_output.startswith("Vid"):
-            matches = pattern.findall(output)
-            if matches:
-                first_percentage = float(matches[0].replace("%", ""))
-                if first_percentage < 100.0:
-                    progress.update(task_id, completed=first_percentage)
-                else:
-                    progress.update(task_id, completed=99)
+            if output.strip().replace(" ", "").startswith("Vid"):
+                matches = pattern.findall(output)
+                if matches:
+                    first_percentage = float(matches[0].replace("%", ""))
+                    if first_percentage < 100.0:
+                        progress.update(task_id, completed=first_percentage)
+                    else:
+                        progress.update(task_id, completed=99)
 
-    stdout_nm3u8dl, stderr_nm3u8dl = process_nm3u8dl.communicate()
+    _, stderr_nm3u8dl = process_nm3u8dl.communicate()
 
     if stderr_nm3u8dl or process_nm3u8dl.returncode != 0:
         progress.console.log(
@@ -146,7 +145,7 @@ def process_mpd(
                 seconds = timestamp_to_seconds(timestamp)
                 progress.update(task_id, completed=(int(seconds) / length) * 100)
 
-    stdout_ffmpeg, stderr_ffmpeg = process_ffmpeg.communicate()
+    _, stderr_ffmpeg = process_ffmpeg.communicate()
 
     if stderr_ffmpeg or process_ffmpeg.returncode != 0:
         progress.console.log(

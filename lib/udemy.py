@@ -66,6 +66,7 @@ class Udemy:
                 This could be due to network issues, an invalid URL,
                 or Udemy being temporarily unavailable."""
             )
+            return None
 
     def extract_course_id(self, course_url):
 
@@ -84,12 +85,11 @@ class Udemy:
                 number = number_match.group(1)
                 logger.info("Course ID Extracted: %s", number)
                 return number
-            else:
-                logger.critical(
-                    """Unable to retrieve a valid course ID from the provided course URL.
-                    Please check the course URL or try with --id."""
-                )
-                sys.exit(1)
+            logger.critical(
+                """Unable to retrieve a valid course ID from the provided course URL.
+                Please check the course URL or try with --id."""
+            )
+            sys.exit(1)
         else:
             logger.critical(
                 """Unable to retrieve a valid course ID from the provided course URL.
@@ -217,8 +217,8 @@ class Udemy:
             return self.request(
                 LECTURE_URL.format(portal=self.portal, course_id=course_id, lecture_id=lecture_id)
             ).json()
-        except Exception as e:
-            logger.critical(f"Failed to fetch lecture info: {e}")
+        except requests.exceptions.RequestException as e:
+            logger.critical("Failed to fetch lecture info: %s", e)
             sys.exit(1)
 
     def create_directory(self, path):
@@ -226,8 +226,8 @@ class Udemy:
             os.makedirs(path)
         except FileExistsError:
             pass
-        except Exception as e:
-            logger.error(f'Failed to create directory "{path}": {e}')
+        except OSError as e:
+            logger.error('Failed to create directory "%s": %s', path, e)
             sys.exit(1)
 
     def download_lecture(
@@ -241,11 +241,12 @@ class Udemy:
         task_id,
         progress,
     ):
+        lecture_title = sanitize_filename(lecture['title'])
         if not self.skip_captions and len(lect_info["asset"]["captions"]) > 0:
             download_captions(
                 lect_info["asset"]["captions"],
                 folder_path,
-                f"{lindex}. {sanitize_filename(lecture['title'])}",
+                f"{lindex}. {lecture_title}",
                 self.captions,
                 self.convert_to_srt,
             )
@@ -297,7 +298,7 @@ class Udemy:
                         download_mp4(
                             mp4_url,
                             temp_folder_path,
-                            f"{lindex}. {sanitize_filename(lecture['title'])}",
+                            f"{lindex}. {lecture_title}",
                             task_id,
                             progress,
                         )
@@ -305,7 +306,7 @@ class Udemy:
                     download_and_merge_m3u8(
                         m3u8_url,
                         temp_folder_path,
-                        f"{lindex}. {sanitize_filename(lecture['title'])}",
+                        f"{lindex}. {lecture_title}",
                         task_id,
                         progress,
                     )
@@ -318,7 +319,7 @@ class Udemy:
                 download_and_merge_mpd(
                     mpd_url,
                     temp_folder_path,
-                    f"{lindex}. {sanitize_filename(lecture['title'])}",
+                    f"{lindex}. {lecture_title}",
                     lecture["asset"]["time_estimation"],
                     self.key,
                     task_id,
@@ -329,7 +330,7 @@ class Udemy:
                 self,
                 lect_info["asset"],
                 temp_folder_path,
-                f"{lindex}. {sanitize_filename(lecture['title'])}",
+                f"{lindex}. {lecture_title}",
                 task_id,
                 progress,
             )
@@ -346,6 +347,8 @@ class Udemy:
         end_chapter = settings.end_chapter
         start_lecture = settings.start_lecture
         end_lecture = settings.end_lecture
+        COURSE_DIR = settings.COURSE_DIR
+        course_id = settings.course_id
 
         progress = Progress(
             SpinnerColumn(),

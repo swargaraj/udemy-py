@@ -101,7 +101,7 @@ def validate_concurrent_downloads(concurrent):
             "The maximum number of concurrent downloads is 25. Capping to 25."
         )
         return 25
-    elif concurrent < 1:
+    if concurrent < 1:
         logger.warning("The minimum number of concurrent downloads is 1. Capping to 1.")
         return 1
     return concurrent
@@ -110,10 +110,9 @@ def validate_concurrent_downloads(concurrent):
 def determine_course_id(args, udemy, course_url):
     if args.id:
         return args.id
-    elif course_url:
+    if course_url:
         return udemy.extract_course_id(course_url)
-    else:
-        logger.error(
-            "You must provide either the course ID with '--id' or the course URL with '--url'."
-        )
-        sys.exit(1)
+    logger.error(
+        "You must provide either the course ID with '--id' or the course URL with '--url'."
+    )
+    sys.exit(1)

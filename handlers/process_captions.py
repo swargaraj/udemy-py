@@ -12,7 +12,7 @@ def download_captions(
     ]
 
     for caption in filtered_captions:
-        response = requests.get(caption["url"])
+        response = requests.get(caption["url"], timeout=10)
         response.raise_for_status()
         if caption["file_name"].endswith(".vtt"):
             caption_name = f"{title_of_output_mp4} - {caption['video_label']}.vtt"

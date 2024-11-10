@@ -17,7 +17,7 @@ def download_mp4(
     output_path = os.path.dirname(download_folder_path)
 
     try:
-        response = requests.get(mp4_file_url, stream=True)
+        response = requests.get(mp4_file_url, stream=True, timeout=10)
         response.raise_for_status()
         total_size = int(response.headers.get("content-length", 0))
 
@@ -38,7 +38,7 @@ def download_mp4(
         )
         progress.remove_task(task_id)
         shutil.rmtree(download_folder_path)
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         print(e)
         progress.console.log(
             f"[red]Error Downloading {remove_emojis_and_binary(title_of_output_mp4)}[/red] ✕"
