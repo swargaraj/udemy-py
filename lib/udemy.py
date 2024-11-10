@@ -138,19 +138,14 @@ class Udemy:
                 if (
                     response.get("detail")
                     == "You do not have permission to perform this action."
+                    or response.get("detail")
+                    == "You do not have permission to perform this action."
                 ):
-                    progress.console.log(
-                        """[red]The course was found, but the curriculum (lectures and materials)
+                    progress.stop()
+                    logger.error(
+                        """The course was found, but the curriculum (lectures and materials)
                         could not be retrieved. This could be due to API issues, restrictions on
-                        the course, or a malformed course structure.[/red]"""
-                    )
-                    sys.exit(1)
-
-                if response.get("detail") == "Not found.":
-                    progress.console.log(
-                        """[red]The course was found, but the curriculum (lectures and materials)
-                        could not be retrieved. This could be due to API issues, restrictions on
-                        the course, or a malformed course structure.[/red]"""
+                        the course, or a malformed course structure."""
                     )
                     sys.exit(1)
 
@@ -194,8 +189,8 @@ class Udemy:
 
         num_chapters = len(curriculum)
 
-        logger.info(f"Discovered Chapter(s): {num_chapters}")
-        logger.info(f"Discovered Lectures(s): {total_lectures}")
+        logger.info("Discovered Chapter(s): %s", num_chapters)
+        logger.info("Discovered Lectures(s): %s", total_lectures)
 
         return curriculum
 

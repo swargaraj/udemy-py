@@ -133,7 +133,7 @@ def main():
             try:
                 with open(load_path, "r", encoding="utf-8") as file:
                     course_curriculum = json.load(file)
-                    logger.info(
+                    logger.success(
                         "The course curriculum has been successfully loaded from %s",
                         load_path,
                     )
@@ -172,7 +172,7 @@ def main():
         with open(save_path, "w", encoding="utf-8") as f:
             json.dump(course_curriculum, f, indent=4)
 
-        logger.info(
+        logger.success(
             "The course curriculum has been successfully saved to %s", save_path
         )
 
@@ -189,7 +189,7 @@ def main():
 
                 with open(args.tree, "w", encoding="utf-8") as f:
                     rprint(root_tree, file=f)
-                    logger.info(
+                    logger.success(
                         "The course curriculum tree has been successfully saved to %s",
                         args.tree,
                     )
@@ -237,8 +237,8 @@ def main():
         start_time = time.time()
         udemy.download_course(course_curriculum, settings)
         elapsed_time = time.time() - start_time
-        logger.info("Download finished in %s", format_time(elapsed_time))
-        logger.info("All course materials have been successfully downloaded.")
+        logger.success("Download finished in %s", format_time(elapsed_time))
+        logger.success("All course materials have been successfully downloaded.")
 
     except KeyboardInterrupt:
         logger.warning("Process interrupted. Exiting")
